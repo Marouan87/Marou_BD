@@ -179,11 +179,17 @@ def assembler_pdf(histoire_id):
 
     with tempfile.TemporaryDirectory() as tmp:
         # Télécharger les images
+        # On reconstruit l'URL réelle : les fichiers sont rangés dans
+        # le bucket sous images/{histoire_id}/{page_id}.png
         img_paths = {}
         for page in pages_ok:
             pid = page["id"]
             path = os.path.join(tmp, f"{pid}.jpg")
-            r = requests.get(page["image_url"], timeout=30)
+            real_url = (
+                f"{SUPABASE_URL}/storage/v1/object/public/"
+                f"images/{histoire_id}/{pid}.png"
+            )
+            r = requests.get(real_url, timeout=30)
             r.raise_for_status()
             img = PILImage.open(io.BytesIO(r.content)).convert("RGB")
             img.save(path, format="JPEG", quality=95)
