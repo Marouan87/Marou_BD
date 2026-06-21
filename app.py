@@ -24,7 +24,7 @@ app = Flask(__name__)
 # DejaVu Sans gere les accents, contrairement aux polices Helvetica integrees.
 # On cherche d'abord la version embarquee dans le projet (dossier fonts/),
 # avec repli sur le chemin systeme Linux.
-_FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+_FONT_DIR = os.path.dirname(os.path.abspath(__file__))
 _SYS_DIR = "/usr/share/fonts/truetype/dejavu"
 
 
