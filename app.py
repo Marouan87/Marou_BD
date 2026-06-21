@@ -71,6 +71,27 @@ def fetch_pages(histoire_id):
     return r.json()
 
 
+def fetch_heros_nom():
+    """
+    Recupere le prenom du personnage principal (role = 'enfant').
+    Retourne None si aucun, pour que la couverture retombe sur la
+    mention generique sans planter.
+    """
+    try:
+        r = requests.get(
+            f"{SUPABASE_URL}/rest/v1/personnages",
+            headers=HEADERS,
+            params={"role": "eq.enfant", "select": "nom", "limit": "1"},
+        )
+        r.raise_for_status()
+        data = r.json()
+        if data and data[0].get("nom"):
+            return data[0]["nom"].capitalize()
+    except Exception:
+        pass
+    return None
+
+
 def upload_pdf(pdf_bytes: bytes, histoire_id: str) -> str:
     filename = f"{histoire_id}.pdf"
     r = requests.post(
@@ -266,9 +287,8 @@ def assembler_pdf(histoire_id):
         c = canvas.Canvas(pdf_path, pagesize=(PAGE_W, PAGE_H))
 
         # Couverture double page (4e de couv a gauche, couverture avant a droite)
-        # enfant_nom : a brancher demain depuis le personnage heros de la table
-        # personnages (ex. role = 'heros'), sinon mention generique par defaut.
-        draw_cover(c, titre, img_paths[pages_ok[0]["id"]], enfant_nom=None)
+        enfant_nom = fetch_heros_nom()
+        draw_cover(c, titre, img_paths[pages_ok[0]["id"]], enfant_nom=enfant_nom)
 
         # Double pages
         for i, page in enumerate(pages_ok):
