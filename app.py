@@ -154,16 +154,82 @@ def draw_image_page(c, img_path, x_offset=0):
     c.drawImage(img_path, x_offset, 0, width=HALF_W, height=PAGE_H, preserveAspectRatio=False)
 
 
-def draw_cover(c, titre, img_path):
-    c.drawImage(img_path, 0, 0, width=PAGE_W, height=PAGE_H, preserveAspectRatio=False)
-    bandeau_h = 45 * mm
-    c.setFillColor(Color(1, 1, 1, alpha=0.82))
-    c.rect(0, PAGE_H - bandeau_h, PAGE_W, bandeau_h, fill=1, stroke=0)
+# Nom de travail provisoire de l'outil, a remplacer le jour de la commercialisation
+TOOL_NAME = "MonHistoire"
+TOOL_BASELINE = "Un livre unique, cree rien que pour votre enfant"
+
+
+def draw_cover(c, titre, img_path, enfant_nom=None):
+    """
+    Double page de couverture en mode impression.
+    Moitie gauche  : quatrieme de couverture (dos du livre)
+    Moitie droite  : couverture avant, illustration carree + titre
+    """
+    # ── Moitie droite : couverture avant ──
+    # Illustration carree qui remplit la demi-page droite (pas d'etirement)
+    c.drawImage(img_path, HALF_W, 0, width=HALF_W, height=PAGE_H,
+                preserveAspectRatio=True, anchor='c')
+
+    # Bandeau titre semi-transparent en haut de la couverture avant
+    bandeau_h = 38 * mm
+    c.setFillColor(Color(1, 1, 1, alpha=0.85))
+    c.rect(HALF_W, PAGE_H - bandeau_h, HALF_W, bandeau_h, fill=1, stroke=0)
     c.setFillColor(HexColor("#E67E00"))
-    font_size = 36
+    font_size = 30
     c.setFont(FONT_NAME, font_size)
     text_w = c.stringWidth(titre, FONT_NAME, font_size)
-    c.drawString((PAGE_W - text_w) / 2, PAGE_H - bandeau_h + 10 * mm, titre)
+    c.drawString(HALF_W + (HALF_W - text_w) / 2,
+                 PAGE_H - bandeau_h + 12 * mm, titre)
+
+    # ── Moitie gauche : quatrieme de couverture ──
+    # Fond uni doux
+    c.setFillColor(HexColor("#FFF3E0"))
+    c.rect(0, 0, HALF_W, PAGE_H, fill=1, stroke=0)
+
+    # Quelques etoiles discretes pour rester dans l'univers du livre
+    draw_stars(c, 0, HALF_W, PAGE_H, "#FFF3E0", n=8, seed=999)
+
+    # Nom de l'outil, centre haut
+    c.setFillColor(HexColor("#E67E00"))
+    c.setFont(FONT_NAME, 34)
+    name_w = c.stringWidth(TOOL_NAME, FONT_NAME, 34)
+    c.drawString((HALF_W - name_w) / 2, PAGE_H - 45 * mm, TOOL_NAME)
+
+    # Baseline
+    c.setFillColor(HexColor("#5A5A6E"))
+    c.setFont("Helvetica", 13)
+    base_lines = wrap_text(c, TOOL_BASELINE, "Helvetica", 13, HALF_W - 50 * mm)
+    by = PAGE_H - 58 * mm
+    for line in base_lines:
+        lw = c.stringWidth(line, "Helvetica", 13)
+        c.drawString((HALF_W - lw) / 2, by, line)
+        by -= 18
+
+    # Mention de personnalisation au centre
+    if enfant_nom:
+        mention = f"Une histoire creee specialement pour {enfant_nom}"
+    else:
+        mention = "Une histoire creee specialement pour votre enfant"
+    c.setFillColor(HexColor("#1A1A2E"))
+    c.setFont("Helvetica-Oblique", 14)
+    mlines = wrap_text(c, mention, "Helvetica-Oblique", 14, HALF_W - 50 * mm)
+    my = PAGE_H / 2
+    for line in mlines:
+        lw = c.stringWidth(line, "Helvetica-Oblique", 14)
+        c.drawString((HALF_W - lw) / 2, my, line)
+        my -= 20
+
+    # Pied : techno et annee
+    c.setFillColor(HexColor("#9A9AA8"))
+    c.setFont("Helvetica", 10)
+    pied = "Histoire et illustrations generees par intelligence artificielle"
+    pw = c.stringWidth(pied, "Helvetica", 10)
+    c.drawString((HALF_W - pw) / 2, 30 * mm, pied)
+
+    annee = "2026"
+    aw = c.stringWidth(annee, "Helvetica", 10)
+    c.drawString((HALF_W - aw) / 2, 22 * mm, annee)
+
     c.showPage()
 
 # ─── Assemblage ───────────────────────────────────────────────────────────────
@@ -199,8 +265,10 @@ def assembler_pdf(histoire_id):
         pdf_path = os.path.join(tmp, "livre.pdf")
         c = canvas.Canvas(pdf_path, pagesize=(PAGE_W, PAGE_H))
 
-        # Couverture
-        draw_cover(c, titre, img_paths[pages_ok[0]["id"]])
+        # Couverture double page (4e de couv a gauche, couverture avant a droite)
+        # enfant_nom : a brancher demain depuis le personnage heros de la table
+        # personnages (ex. role = 'heros'), sinon mention generique par defaut.
+        draw_cover(c, titre, img_paths[pages_ok[0]["id"]], enfant_nom=None)
 
         # Double pages
         for i, page in enumerate(pages_ok):
