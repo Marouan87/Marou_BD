@@ -14,9 +14,30 @@ from flask import Flask, request, jsonify
 from reportlab.pdfgen import canvas
 from reportlab.lib.units import mm
 from reportlab.lib.colors import HexColor, Color
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 from PIL import Image as PILImage
 
 app = Flask(__name__)
+
+# ─── Polices Unicode (accents francais) ────────────────────────────────────────
+# DejaVu Sans gere les accents, contrairement aux polices Helvetica integrees.
+# On cherche d'abord la version embarquee dans le projet (dossier fonts/),
+# avec repli sur le chemin systeme Linux.
+_FONT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts")
+_SYS_DIR = "/usr/share/fonts/truetype/dejavu"
+
+
+def _font_path(filename):
+    local = os.path.join(_FONT_DIR, filename)
+    if os.path.exists(local):
+        return local
+    return os.path.join(_SYS_DIR, filename)
+
+
+pdfmetrics.registerFont(TTFont("DejaVu", _font_path("DejaVuSans.ttf")))
+pdfmetrics.registerFont(TTFont("DejaVu-Bold", _font_path("DejaVuSans-Bold.ttf")))
+pdfmetrics.registerFont(TTFont("DejaVu-Oblique", _font_path("DejaVuSans-Oblique.ttf")))
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
@@ -33,7 +54,7 @@ PAGE_H  = 180 * mm
 HALF_W  = PAGE_W / 2
 TEXT_MARGIN_X = 30 * mm
 
-FONT_NAME = "Helvetica-Bold"
+FONT_NAME = "DejaVu-Bold"
 FONT_SIZE = 22
 
 PALETTE = [
@@ -177,7 +198,7 @@ def draw_image_page(c, img_path, x_offset=0):
 
 # Nom de travail provisoire de l'outil, a remplacer le jour de la commercialisation
 TOOL_NAME = "MonHistoire"
-TOOL_BASELINE = "Un livre unique, cree rien que pour votre enfant"
+TOOL_BASELINE = "Un livre unique, créé rien que pour votre enfant"
 
 
 def draw_cover(c, titre, img_path, enfant_nom=None):
@@ -218,37 +239,37 @@ def draw_cover(c, titre, img_path, enfant_nom=None):
 
     # Baseline
     c.setFillColor(HexColor("#5A5A6E"))
-    c.setFont("Helvetica", 13)
-    base_lines = wrap_text(c, TOOL_BASELINE, "Helvetica", 13, HALF_W - 50 * mm)
+    c.setFont("DejaVu", 13)
+    base_lines = wrap_text(c, TOOL_BASELINE, "DejaVu", 13, HALF_W - 50 * mm)
     by = PAGE_H - 58 * mm
     for line in base_lines:
-        lw = c.stringWidth(line, "Helvetica", 13)
+        lw = c.stringWidth(line, "DejaVu", 13)
         c.drawString((HALF_W - lw) / 2, by, line)
         by -= 18
 
     # Mention de personnalisation au centre
     if enfant_nom:
-        mention = f"Une histoire creee specialement pour {enfant_nom}"
+        mention = f"Une histoire créée spécialement pour {enfant_nom}"
     else:
-        mention = "Une histoire creee specialement pour votre enfant"
+        mention = "Une histoire créée spécialement pour votre enfant"
     c.setFillColor(HexColor("#1A1A2E"))
-    c.setFont("Helvetica-Oblique", 14)
-    mlines = wrap_text(c, mention, "Helvetica-Oblique", 14, HALF_W - 50 * mm)
+    c.setFont("DejaVu-Oblique", 14)
+    mlines = wrap_text(c, mention, "DejaVu-Oblique", 14, HALF_W - 50 * mm)
     my = PAGE_H / 2
     for line in mlines:
-        lw = c.stringWidth(line, "Helvetica-Oblique", 14)
+        lw = c.stringWidth(line, "DejaVu-Oblique", 14)
         c.drawString((HALF_W - lw) / 2, my, line)
         my -= 20
 
     # Pied : techno et annee
     c.setFillColor(HexColor("#9A9AA8"))
-    c.setFont("Helvetica", 10)
-    pied = "Histoire et illustrations generees par intelligence artificielle"
-    pw = c.stringWidth(pied, "Helvetica", 10)
+    c.setFont("DejaVu", 10)
+    pied = "Histoire et illustrations générées par intelligence artificielle"
+    pw = c.stringWidth(pied, "DejaVu", 10)
     c.drawString((HALF_W - pw) / 2, 30 * mm, pied)
 
     annee = "2026"
-    aw = c.stringWidth(annee, "Helvetica", 10)
+    aw = c.stringWidth(annee, "DejaVu", 10)
     c.drawString((HALF_W - aw) / 2, 22 * mm, annee)
 
     c.showPage()
