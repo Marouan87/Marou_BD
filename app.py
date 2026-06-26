@@ -357,30 +357,21 @@ def draw_cover(c, titre, img_path, enfant_nom=None):
     bw = c.stringWidth(BRAND_BASELINE, F_BODY, 13)
     c.drawString(lcx - bw / 2, PAGE_H - 52 * mm, BRAND_BASELINE)
 
-    # Mention de personnalisation au centre, prenom en orange entre deux traits.
-    # Forme : "Une histoire imaginée pour  — Nael —"
+    # Mention de personnalisation, sur une seule ligne, centree.
+    # Forme : "Une histoire imaginée pour Nael" (intro brun italique, prenom orange).
     prenom = (enfant_nom or "votre enfant").strip()
-    intro = "Une histoire imaginée pour"
+    intro = "Une histoire imaginée pour "
+    size = 15
+    iw = c.stringWidth(intro, F_ITALIC, size)
+    pw = c.stringWidth(prenom, F_ITALIC, size)
+    total = iw + pw
+    mx = lcx - total / 2
+    my = PAGE_H / 2
+    c.setFont(F_ITALIC, size)
     c.setFillColor(HexColor(C_BRUN))
-    c.setFont(F_ITALIC, 14)
-    iw = c.stringWidth(intro, F_ITALIC, 14)
-    my = PAGE_H / 2 + 6 * mm
-    c.drawString(lcx - iw / 2, my, intro)
-
-    # Ligne prenom : tiret — prenom(orange) — tiret
-    name_size = 20
-    name_w = c.stringWidth(prenom, F_TITLE, name_size)
-    dash = "—"
-    c.setFont(F_TITLE, name_size)
-    dash_w = c.stringWidth(dash, F_TITLE, name_size)
-    dgap = 5 * mm
-    ny = my - 12 * mm
-    total = dash_w + dgap + name_w + dgap + dash_w
-    nx = lcx - total / 2
+    c.drawString(mx, my, intro)
     c.setFillColor(HexColor(C_ORANGE))
-    c.drawString(nx, ny, dash)
-    c.drawString(nx + dash_w + dgap, ny, prenom)
-    c.drawString(nx + dash_w + dgap + name_w + dgap, ny, dash)
+    c.drawString(mx + iw, my, prenom)
 
     # CTA : site en orange gras, centre
     cta_intro = "Créez la vôtre sur"
