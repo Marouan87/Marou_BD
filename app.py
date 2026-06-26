@@ -6,6 +6,7 @@ Réponse : { "pdf_url": "https://..." } après upload dans Supabase Storage
 
 import os
 import io
+import json
 import math
 import random
 import requests
@@ -99,7 +100,7 @@ def fetch_histoire(histoire_id):
     r = requests.get(
         f"{SUPABASE_URL}/rest/v1/histoires",
         headers=HEADERS,
-        params={"id": f"eq.{histoire_id}", "select": "id,titre,theme"},
+        params={"id": f"eq.{histoire_id}", "select": "id,titre,theme,contenu"},
     )
     r.raise_for_status()
     data = r.json()
@@ -143,8 +144,10 @@ def fetch_heros_nom():
     return None
 
 
-def upload_pdf(pdf_bytes: bytes, histoire_id: str) -> str:
-    filename = f"{histoire_id}.pdf"
+def upload_pdf(pdf_bytes: bytes, histoire_id: str, palette_id: int) -> str:
+    # Un fichier distinct par couleur : l'URL change quand la palette change,
+    # ce qui evite que le navigateur resserve un ancien PDF depuis son cache.
+    filename = f"{histoire_id}_p{palette_id}.pdf"
     r = requests.post(
         f"{SUPABASE_URL}/storage/v1/object/pdfs/{filename}",
         headers={
@@ -156,6 +159,22 @@ def upload_pdf(pdf_bytes: bytes, histoire_id: str) -> str:
     )
     r.raise_for_status()
     return f"{SUPABASE_URL}/storage/v1/object/public/pdfs/{filename}"
+
+
+def save_pdf_cache(histoire_id: str, contenu: dict, pdf_url: str, palette_id: int):
+    """Memorise dans contenu l'URL du PDF et la palette avec laquelle il a ete
+    genere, pour pouvoir resservir le cache sans re-generer si la palette ne
+    change pas."""
+    new_contenu = dict(contenu or {})
+    new_contenu["pdf_url"] = pdf_url
+    new_contenu["pdf_palette_id"] = palette_id
+    r = requests.patch(
+        f"{SUPABASE_URL}/rest/v1/histoires",
+        headers={**HEADERS, "Content-Type": "application/json"},
+        params={"id": f"eq.{histoire_id}"},
+        data=json.dumps({"contenu": new_contenu}),
+    )
+    r.raise_for_status()
 
 # ─── Dessin ───────────────────────────────────────────────────────────────────
 
@@ -407,8 +426,9 @@ def draw_cover(c, titre, img_path, enfant_nom=None):
 
 # ─── Assemblage ───────────────────────────────────────────────────────────────
 
-def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT):
-    histoire = fetch_histoire(histoire_id)
+def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
+    if histoire is None:
+        histoire = fetch_histoire(histoire_id)
     pages = fetch_pages(histoire_id)
     titre = histoire.get("titre", "Mon livre")
     pages_ok = [p for p in pages if p.get("image_url")]
@@ -462,9 +482,9 @@ def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT):
         with open(pdf_path, "rb") as f:
             pdf_bytes = f.read()
 
-    # Upload dans Supabase Storage
-    pdf_url = upload_pdf(pdf_bytes, histoire_id)
-    return pdf_url
+    # Upload dans Supabase Storage (un fichier par palette)
+    pdf_url = upload_pdf(pdf_bytes, histoire_id, idx)
+    return pdf_url, idx
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
 
@@ -487,10 +507,40 @@ def generate_pdf():
 
     histoire_id = data["histoire_id"]
     palette_id = data.get("palette_id", PALETTE_DEFAUT)
+    force = bool(data.get("force", False))   # optionnel : force la regeneration
+
+    # Normalise la palette demandee de la meme facon que la generation
+    try:
+        wanted = int(palette_id)
+    except (TypeError, ValueError):
+        wanted = PALETTE_DEFAUT
+    if wanted < 0 or wanted >= len(PALETTE):
+        wanted = PALETTE_DEFAUT
 
     try:
-        pdf_url = assembler_pdf(histoire_id, palette_id=palette_id)
-        return jsonify({"pdf_url": pdf_url, "histoire_id": histoire_id})
+        histoire = fetch_histoire(histoire_id)
+        contenu = histoire.get("contenu") or {}
+        cached_url = contenu.get("pdf_url")
+        cached_palette = contenu.get("pdf_palette_id")
+
+        # Cache hit : meme couleur + PDF deja genere -> aucun rendu, URL directe
+        if not force and cached_url and cached_palette == wanted:
+            return jsonify({
+                "pdf_url": cached_url,
+                "histoire_id": histoire_id,
+                "cached": True,
+            })
+
+        # Sinon : (re)generation pour cette couleur, puis mise a jour du cache
+        pdf_url, used_palette = assembler_pdf(
+            histoire_id, palette_id=wanted, histoire=histoire
+        )
+        save_pdf_cache(histoire_id, contenu, pdf_url, used_palette)
+        return jsonify({
+            "pdf_url": pdf_url,
+            "histoire_id": histoire_id,
+            "cached": False,
+        })
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
     except Exception as e:
