@@ -39,6 +39,31 @@ pdfmetrics.registerFont(TTFont("DejaVu", _font_path("DejaVuSans.ttf")))
 pdfmetrics.registerFont(TTFont("DejaVu-Bold", _font_path("DejaVuSans-Bold.ttf")))
 pdfmetrics.registerFont(TTFont("DejaVu-Oblique", _font_path("DejaVuSans-Oblique.ttf")))
 
+# Polices de marque Piklo (Quicksand pour les titres, Nunito pour le corps).
+# Si un fichier manque on retombe sur DejaVu pour ne pas casser la generation.
+def _register_brand_fonts():
+    brand = {
+        "Quicksand-Bold":  ("Quicksand-Bold.ttf",  "DejaVu-Bold"),
+        "Nunito":          ("Nunito-Regular.ttf",  "DejaVu"),
+        "Nunito-Bold":     ("Nunito-Bold.ttf",     "DejaVu-Bold"),
+        "Nunito-Italic":   ("Nunito-Italic.ttf",   "DejaVu-Oblique"),
+    }
+    resolved = {}
+    for name, (filename, fallback) in brand.items():
+        path = _font_path(filename)
+        if os.path.exists(path):
+            pdfmetrics.registerFont(TTFont(name, path))
+            resolved[name] = name
+        else:
+            resolved[name] = fallback
+    return resolved
+
+BRAND_FONTS = _register_brand_fonts()
+F_TITLE   = BRAND_FONTS["Quicksand-Bold"]   # titre couverture + mot "Piklo"
+F_BODY    = BRAND_FONTS["Nunito"]           # surtitre, mentions
+F_BODY_B  = BRAND_FONTS["Nunito-Bold"]
+F_ITALIC  = BRAND_FONTS["Nunito-Italic"]
+
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
 API_SECRET   = os.environ.get("API_SECRET", "")   # optionnel, pour sécuriser l'endpoint
@@ -201,80 +226,191 @@ def draw_image_page(c, img_path, x_offset=0):
 
 
 # Nom de travail provisoire de l'outil, a remplacer le jour de la commercialisation
-TOOL_NAME = "MonHistoire"
-TOOL_BASELINE = "Un livre unique, créé rien que pour votre enfant"
+# ─── Marque Piklo (4e de couverture) ──────────────────────────────────────────
+BRAND_NAME     = "Piklo"
+BRAND_BASELINE = "Chaque histoire mérite son héros."
+BRAND_SITE     = "studiopiklo.com"
+
+# Tokens couleur (alignes sur la maquette Claude Design)
+C_CREME    = "#FFF7EE"   # fond 4e de couv
+C_ORANGE   = "#D2774B"   # orange chaud Piklo
+C_ORANGE2  = "#E6AC63"   # haut du degrade du logo
+C_BRUN     = "#38302A"   # brun texte
+C_GRIS     = "#9A9AA8"   # mentions secondaires
+C_SURTITRE = "#F0C99B"   # surtitre sur l'illustration (premiere de couv)
+
+
+def draw_piklo_mark(c, x, y, box=11 * mm, gap=3.2 * mm, label_color="#FFF7EE",
+                    label_size=23, with_label=True):
+    """Logo Piklo : carre arrondi degrade orange + disque creme, suivi de 'Piklo'.
+    (x, y) = coin bas-gauche du carre. Le degrade est approxime par un aplat
+    orange (ReportLab ne fait pas de degrade lineaire simple sur un rect)."""
+    # Carre arrondi
+    c.setFillColor(HexColor(C_ORANGE))
+    c.roundRect(x, y, box, box, box * 0.32, fill=1, stroke=0)
+    # Disque creme centre
+    c.setFillColor(HexColor(C_CREME))
+    r = box * 0.17
+    c.circle(x + box / 2, y + box / 2, r, fill=1, stroke=0)
+    # Mot "Piklo"
+    if with_label:
+        c.setFillColor(HexColor(label_color))
+        c.setFont(F_TITLE, label_size)
+        c.drawString(x + box + gap, y + (box - label_size * 0.72) / 2, BRAND_NAME)
 
 
 def draw_cover(c, titre, img_path, enfant_nom=None):
     """
     Double page de couverture en mode impression.
-    Moitie gauche  : quatrieme de couverture (dos du livre)
-    Moitie droite  : couverture avant, illustration carree + titre
+    Moitie gauche  : quatrieme de couverture (page de garde)
+    Moitie droite  : premiere de couverture, illustration plein cadre + titre en bas
     """
-    # ── Moitie droite : couverture avant ──
-    # Illustration carree qui remplit la demi-page droite (pas d'etirement)
+    # ══ Moitie droite : PREMIERE DE COUVERTURE (maquette plein cadre) ══
+    # Illustration plein cadre sur toute la demi-page droite
     c.drawImage(img_path, HALF_W, 0, width=HALF_W, height=PAGE_H,
                 preserveAspectRatio=True, anchor='c')
 
-    # Bandeau titre semi-transparent en haut de la couverture avant
-    bandeau_h = 38 * mm
-    c.setFillColor(Color(1, 1, 1, alpha=0.85))
-    c.rect(HALF_W, PAGE_H - bandeau_h, HALF_W, bandeau_h, fill=1, stroke=0)
-    c.setFillColor(HexColor("#E67E00"))
-    font_size = 30
-    c.setFont(FONT_NAME, font_size)
-    text_w = c.stringWidth(titre, FONT_NAME, font_size)
-    c.drawString(HALF_W + (HALF_W - text_w) / 2,
-                 PAGE_H - bandeau_h + 12 * mm, titre)
+    # Scrim sombre en bas (lisibilite du titre). Approxime par bandes empilees
+    # de transparence croissante, du bas (opaque) vers le haut (transparent).
+    scrim_h = 95 * mm
+    bands = 90
+    bh = scrim_h / bands
+    for i in range(bands):
+        frac = i / (bands - 1)               # 0 en bas, 1 en haut
+        alpha = 0.86 * (1 - frac) ** 1.6
+        c.setFillColor(Color(28 / 255, 17 / 255, 9 / 255, alpha=alpha))
+        c.rect(HALF_W, i * bh, HALF_W, bh + 1.2, fill=1, stroke=0)
 
-    # ── Moitie gauche : quatrieme de couverture ──
-    # Fond uni doux
-    c.setFillColor(HexColor("#FFF3E0"))
+    # Scrim leger en haut (pour le logo)
+    top_h = 40 * mm
+    tbands = 50
+    tbh = top_h / tbands
+    for i in range(tbands):
+        frac = i / (tbands - 1)
+        alpha = 0.42 * (1 - frac) ** 1.6
+        c.setFillColor(Color(34 / 255, 22 / 255, 12 / 255, alpha=alpha))
+        c.rect(HALF_W, PAGE_H - (i + 1) * tbh, HALF_W, tbh + 1.2, fill=1, stroke=0)
+
+    # Logo Piklo (haut gauche de la couverture)
+    draw_piklo_mark(c, HALF_W + 12 * mm, PAGE_H - 22 * mm,
+                    label_color=C_CREME, label_size=21)
+
+    # Bloc titre, centre en bas
+    cx = HALF_W + HALF_W / 2          # centre horizontal de la demi-page droite
+    # Surtitre
+    surtitre = "UNE HISTOIRE PERSONNALISÉE"
+    c.setFillColor(HexColor(C_SURTITRE))
+    c.setFont(F_BODY_B, 9)
+    # interlettrage manuel pour l'effet "letter-spacing"
+    def draw_tracked(text, font, size, color, center_x, y, tracking):
+        c.setFillColor(HexColor(color))
+        c.setFont(font, size)
+        widths = [c.stringWidth(ch, font, size) for ch in text]
+        total = sum(widths) + tracking * (len(text) - 1)
+        x = center_x - total / 2
+        for ch, w in zip(text, widths):
+            c.drawString(x, y, ch)
+            x += w + tracking
+    draw_tracked(surtitre, F_BODY_B, 9, C_SURTITRE, cx, 60 * mm, 2.4)
+
+    # Titre principal (Quicksand), centre, peut tenir sur 2 lignes
+    title_size = 38
+    tlines = wrap_text(c, titre, F_TITLE, title_size, HALF_W - 30 * mm)
+    while len(tlines) > 2 and title_size > 24:
+        title_size -= 2
+        tlines = wrap_text(c, titre, F_TITLE, title_size, HALF_W - 30 * mm)
+    c.setFillColor(HexColor(C_CREME))
+    c.setFont(F_TITLE, title_size)
+    line_h = title_size * 1.12
+    ty = 40 * mm + (len(tlines) - 1) * line_h
+    for line in tlines:
+        lw = c.stringWidth(line, F_TITLE, title_size)
+        c.drawString(cx - lw / 2, ty, line)
+        ty -= line_h
+
+    # Petit trait orange sous le titre
+    bar_w = 18 * mm
+    c.setFillColor(HexColor(C_ORANGE))
+    c.roundRect(cx - bar_w / 2, 31 * mm, bar_w, 1.4 * mm, 0.7 * mm,
+                fill=1, stroke=0)
+
+    # ══ Moitie gauche : QUATRIEME DE COUVERTURE (page de garde) ══
+    c.setFillColor(HexColor(C_CREME))
     c.rect(0, 0, HALF_W, PAGE_H, fill=1, stroke=0)
 
-    # Quelques etoiles discretes pour rester dans l'univers du livre
-    draw_stars(c, 0, HALF_W, PAGE_H, "#FFF3E0", n=8, seed=999)
+    lcx = HALF_W / 2   # centre horizontal de la demi-page gauche
 
-    # Nom de l'outil, centre haut
-    c.setFillColor(HexColor("#E67E00"))
-    c.setFont(FONT_NAME, 34)
-    name_w = c.stringWidth(TOOL_NAME, FONT_NAME, 34)
-    c.drawString((HALF_W - name_w) / 2, PAGE_H - 45 * mm, TOOL_NAME)
+    # Logo Piklo + "Piklo" en haut, centre
+    box = 12 * mm
+    label_size = 26
+    label_w = c.stringWidth(BRAND_NAME, F_TITLE, label_size)
+    gap = 3.5 * mm
+    group_w = box + gap + label_w
+    gx = lcx - group_w / 2
+    gy = PAGE_H - 40 * mm
+    draw_piklo_mark(c, gx, gy, box=box, gap=gap,
+                    label_color=C_ORANGE, label_size=label_size)
 
-    # Baseline
-    c.setFillColor(HexColor("#5A5A6E"))
-    c.setFont("DejaVu", 13)
-    base_lines = wrap_text(c, TOOL_BASELINE, "DejaVu", 13, HALF_W - 50 * mm)
-    by = PAGE_H - 58 * mm
-    for line in base_lines:
-        lw = c.stringWidth(line, "DejaVu", 13)
-        c.drawString((HALF_W - lw) / 2, by, line)
-        by -= 18
+    # Baseline sous le logo
+    c.setFillColor(HexColor(C_BRUN))
+    c.setFont(F_BODY, 13)
+    bw = c.stringWidth(BRAND_BASELINE, F_BODY, 13)
+    c.drawString(lcx - bw / 2, PAGE_H - 52 * mm, BRAND_BASELINE)
 
-    # Mention de personnalisation au centre
-    if enfant_nom:
-        mention = f"Une histoire créée spécialement pour {enfant_nom}"
-    else:
-        mention = "Une histoire créée spécialement pour votre enfant"
-    c.setFillColor(HexColor("#1A1A2E"))
-    c.setFont("DejaVu-Oblique", 14)
-    mlines = wrap_text(c, mention, "DejaVu-Oblique", 14, HALF_W - 50 * mm)
-    my = PAGE_H / 2
-    for line in mlines:
-        lw = c.stringWidth(line, "DejaVu-Oblique", 14)
-        c.drawString((HALF_W - lw) / 2, my, line)
-        my -= 20
+    # Mention de personnalisation au centre, prenom en orange entre deux traits.
+    # Forme : "Une histoire imaginée pour  — Nael —"
+    prenom = (enfant_nom or "votre enfant").strip()
+    intro = "Une histoire imaginée pour"
+    c.setFillColor(HexColor(C_BRUN))
+    c.setFont(F_ITALIC, 14)
+    iw = c.stringWidth(intro, F_ITALIC, 14)
+    my = PAGE_H / 2 + 6 * mm
+    c.drawString(lcx - iw / 2, my, intro)
 
-    # Pied : techno et annee
-    c.setFillColor(HexColor("#9A9AA8"))
-    c.setFont("DejaVu", 10)
-    pied = "Histoire et illustrations générées par intelligence artificielle"
-    pw = c.stringWidth(pied, "DejaVu", 10)
-    c.drawString((HALF_W - pw) / 2, 30 * mm, pied)
+    # Ligne prenom : tiret — prenom(orange) — tiret
+    name_size = 20
+    name_w = c.stringWidth(prenom, F_TITLE, name_size)
+    dash = "—"
+    c.setFont(F_TITLE, name_size)
+    dash_w = c.stringWidth(dash, F_TITLE, name_size)
+    dgap = 5 * mm
+    ny = my - 12 * mm
+    total = dash_w + dgap + name_w + dgap + dash_w
+    nx = lcx - total / 2
+    c.setFillColor(HexColor(C_ORANGE))
+    c.drawString(nx, ny, dash)
+    c.drawString(nx + dash_w + dgap, ny, prenom)
+    c.drawString(nx + dash_w + dgap + name_w + dgap, ny, dash)
 
-    annee = "2026"
-    aw = c.stringWidth(annee, "DejaVu", 10)
-    c.drawString((HALF_W - aw) / 2, 22 * mm, annee)
+    # CTA : site en orange gras, centre
+    cta_intro = "Créez la vôtre sur"
+    c.setFillColor(HexColor(C_GRIS))
+    c.setFont(F_BODY, 12)
+    ci_w = c.stringWidth(cta_intro, F_BODY, 12)
+    c.setFont(F_BODY_B, 12)
+    site_w = c.stringWidth(BRAND_SITE, F_BODY_B, 12)
+    cta_total = ci_w + 2 * mm + site_w
+    cta_x = lcx - cta_total / 2
+    cta_y = 38 * mm
+    c.setFillColor(HexColor(C_GRIS))
+    c.setFont(F_BODY, 12)
+    c.drawString(cta_x, cta_y, cta_intro)
+    c.setFillColor(HexColor(C_ORANGE))
+    c.setFont(F_BODY_B, 12)
+    c.drawString(cta_x + ci_w + 2 * mm, cta_y, BRAND_SITE)
+
+    # Mentions legales completes (pied)
+    c.setFillColor(HexColor(C_GRIS))
+    c.setFont(F_BODY, 9)
+    legal_lines = [
+        "Histoire et illustrations générées par intelligence artificielle.",
+        f"© 2026 Piklo — {BRAND_SITE}. Tous droits réservés.",
+    ]
+    ly = 26 * mm
+    for line in legal_lines:
+        lw = c.stringWidth(line, F_BODY, 9)
+        c.drawString(lcx - lw / 2, ly, line)
+        ly -= 13
 
     c.showPage()
 
