@@ -57,11 +57,16 @@ TEXT_MARGIN_X = 30 * mm
 FONT_NAME = "DejaVu-Bold"
 FONT_SIZE = 22
 
+# Palette alignee sur la visionneuse Piklo : (fond, couleur du texte)
 PALETTE = [
-    "#FFF3E0", "#FFF8E1", "#F1F8E9", "#E8F5E9",
-    "#FFF9C4", "#E3F2FD", "#F8F9FA", "#FCE4EC",
-    "#EDE7F6", "#E0F7FA", "#FBE9E7", "#E8EAF6",
+    ("#D2774B", "#FFFFFF"),  # Orange Piklo
+    ("#FFF7EE", "#38302A"),  # Creme
+    ("#F4E8D6", "#5A4632"),  # Sable
+    ("#F6E3DE", "#6A4138"),  # Blush
+    ("#E7EDE3", "#3C4A36"),  # Sauge
+    ("#E4ECF2", "#33414E"),  # Ciel
 ]
+PALETTE_DEFAUT = 1  # Creme par defaut
 
 # ─── Supabase ─────────────────────────────────────────────────────────────────
 
@@ -171,12 +176,11 @@ def wrap_text(c, text, font, size, max_width):
     return lines
 
 
-def draw_text_page(c, legende, color_hex, page_index, x_offset=0):
-    c.setFillColor(HexColor(color_hex))
+def draw_text_page(c, legende, bg_hex, fg_hex, x_offset=0):
+    c.setFillColor(HexColor(bg_hex))
     c.rect(x_offset, 0, HALF_W, PAGE_H, fill=1, stroke=0)
-    draw_stars(c, x_offset, HALF_W, PAGE_H, color_hex, n=10, seed=page_index)
 
-    c.setFillColor(HexColor("#1A1A2E"))
+    c.setFillColor(HexColor(fg_hex))
     c.setFont(FONT_NAME, FONT_SIZE)
     available_w = HALF_W - 2 * TEXT_MARGIN_X
     lines = wrap_text(c, legende, FONT_NAME, FONT_SIZE, available_w)
@@ -276,7 +280,7 @@ def draw_cover(c, titre, img_path, enfant_nom=None):
 
 # ─── Assemblage ───────────────────────────────────────────────────────────────
 
-def assembler_pdf(histoire_id):
+def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT):
     histoire = fetch_histoire(histoire_id)
     pages = fetch_pages(histoire_id)
     titre = histoire.get("titre", "Mon livre")
@@ -284,6 +288,15 @@ def assembler_pdf(histoire_id):
 
     if not pages_ok:
         raise ValueError("Aucune page avec image_url trouvée.")
+
+    # Couleur unique choisie dans la visionneuse, appliquee a toutes les pages texte
+    try:
+        idx = int(palette_id)
+    except (TypeError, ValueError):
+        idx = PALETTE_DEFAUT
+    if idx < 0 or idx >= len(PALETTE):
+        idx = PALETTE_DEFAUT
+    bg_hex, fg_hex = PALETTE[idx]
 
     with tempfile.TemporaryDirectory() as tmp:
         # Télécharger les images
@@ -311,10 +324,9 @@ def assembler_pdf(histoire_id):
         enfant_nom = fetch_heros_nom()
         draw_cover(c, titre, img_paths[pages_ok[0]["id"]], enfant_nom=enfant_nom)
 
-        # Double pages
+        # Double pages : meme couleur de fond/texte sur toutes les pages
         for i, page in enumerate(pages_ok):
-            color = PALETTE[i % len(PALETTE)]
-            draw_text_page(c, page.get("legende", ""), color, page_index=i, x_offset=0)
+            draw_text_page(c, page.get("legende", ""), bg_hex, fg_hex, x_offset=0)
             draw_image_page(c, img_paths[page["id"]], x_offset=HALF_W)
             c.showPage()
 
@@ -347,9 +359,10 @@ def generate_pdf():
         return jsonify({"error": "histoire_id requis"}), 400
 
     histoire_id = data["histoire_id"]
+    palette_id = data.get("palette_id", PALETTE_DEFAUT)
 
     try:
-        pdf_url = assembler_pdf(histoire_id)
+        pdf_url = assembler_pdf(histoire_id, palette_id=palette_id)
         return jsonify({"pdf_url": pdf_url, "histoire_id": histoire_id})
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
