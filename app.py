@@ -92,7 +92,7 @@ PALETTE = [
     ("#E7EDE3", "#3C4A36"),  # Sauge
     ("#E4ECF2", "#33414E"),  # Ciel
 ]
-PALETTE_DEFAUT = 1  # Creme par defaut
+PALETTE_DEFAUT = 0  # Orange Piklo par defaut
 
 # ─── Supabase ─────────────────────────────────────────────────────────────────
 
