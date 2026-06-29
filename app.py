@@ -86,7 +86,7 @@ SAFE = 10 * mm           # zone de securite Prodigi : rien d'important au-dela
 TEXT_MARGIN_X = 22 * mm  # marge horizontale du bloc texte (> SAFE)
 
 # Nombre de scenes attendu pour rester dans le forfait 24 pages.
-NB_SCENES = 10
+NB_SCENES = 12
 
 # Bloc de texte des pages legende : corps Nunito, comme la visionneuse.
 # Volontairement plus petit et non gras que l'ancienne version (DejaVu-Bold 24).
@@ -475,7 +475,7 @@ def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
     if not pages_ok:
         raise ValueError("Aucune page avec image_url trouvee.")
 
-    # On borne a NB_SCENES (10) pour rester dans le forfait Prodigi 24 pages.
+    # On borne a NB_SCENES pour rester dans le forfait Prodigi 24 pages.
     pages_ok = pages_ok[:NB_SCENES]
 
     try:
