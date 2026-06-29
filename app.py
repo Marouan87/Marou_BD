@@ -105,7 +105,7 @@ NB_SCENES  = 12
 TARGET_PX  = 2362
 
 TEXT_FONT = F_BODY
-TEXT_SIZE = 19
+TEXT_SIZE = 22
 
 PALETTE = [
     ("#D2774B", "#FFFFFF"),
@@ -377,7 +377,7 @@ def draw_text_page(c, legende, bg_hex, fg_hex):
     if not lines:
         c.showPage()
         return
-    line_height = TEXT_SIZE * 1.6
+    line_height = TEXT_SIZE * 1.8
     cap = TEXT_SIZE * 0.70
     visual_h = (len(lines) - 1) * line_height + cap
     first_baseline = PAGE / 2 + visual_h / 2 - cap
@@ -523,14 +523,23 @@ def draw_marketing(c, tmp_dir):
             try:
                 r = requests.get(univers["url"], timeout=20)
                 r.raise_for_status()
-                book_img = _make_book_cover(r.content,
-                                            out_w=int(vignette_w / mm * 3.78),
-                                            out_h=int(vignette_h / mm * 3.78))
-                book_path = os.path.join(tmp_dir, f"mktg_{i}.png")
-                book_img.save(book_path, format="PNG")
-                c.drawImage(book_path, x, y_img, width=vignette_w,
-                            height=vignette_h, preserveAspectRatio=True,
-                            mask="auto")
+                book_img = _make_book_cover(r.content, out_w=300, out_h=380)
+                # Convertir en JPEG avec fond sombre pour eviter
+                # les problemes de transparence dans ReportLab
+                bg = PILImage.new("RGB", book_img.size, (56, 48, 42))
+                bg.paste(book_img, mask=book_img.split()[3])
+                book_path = os.path.join(tmp_dir, f"mktg_{i}.jpg")
+                bg.save(book_path, format="JPEG", quality=92)
+                # Calculer les dimensions en respectant le ratio
+                ratio = book_img.size[1] / book_img.size[0]
+                draw_w = vignette_w
+                draw_h = draw_w * ratio
+                if draw_h > vignette_h:
+                    draw_h = vignette_h
+                    draw_w = draw_h / ratio
+                c.drawImage(book_path,
+                            x + (vignette_w - draw_w) / 2, y_img,
+                            width=draw_w, height=draw_h)
             except Exception:
                 _draw_placeholder(c, x, y_img, vignette_w, vignette_h)
         else:
