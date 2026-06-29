@@ -5,7 +5,7 @@ Reponse : { "pdf_url": "...", "cover_url": "..." }
 
 Format Gelato hardcover carre 20x20 cm, 30 pages interieures :
 - Deux fichiers PDF distincts :
-  1. PDF interieur  : 32 pages de 200x200 mm
+  1. PDF interieur  : 31 pages de 200x200 mm
      - Page 1       : endpaper blanc (non imprimable)
      - Page 2       : faux-titre
      - Page 3       : dedicace (message parent ou phrase generique)
@@ -43,9 +43,9 @@ def _font_path(filename):
         return local
     return os.path.join(_SYS_DIR, filename)
 
-pdfmetrics.registerFont(TTFont("DejaVu",        _font_path("DejaVuSans.ttf")))
-pdfmetrics.registerFont(TTFont("DejaVu-Bold",   _font_path("DejaVuSans-Bold.ttf")))
-pdfmetrics.registerFont(TTFont("DejaVu-Oblique",_font_path("DejaVuSans-Oblique.ttf")))
+pdfmetrics.registerFont(TTFont("DejaVu",         _font_path("DejaVuSans.ttf")))
+pdfmetrics.registerFont(TTFont("DejaVu-Bold",    _font_path("DejaVuSans-Bold.ttf")))
+pdfmetrics.registerFont(TTFont("DejaVu-Oblique", _font_path("DejaVuSans-Oblique.ttf")))
 
 def _register_brand_fonts():
     brand = {
@@ -71,9 +71,9 @@ F_BODY_B = BRAND_FONTS["Nunito-Bold"]
 F_ITALIC = BRAND_FONTS["Nunito-Italic"]
 
 # ── Config ───────────────────────────────────────────────────────────────────
-SUPABASE_URL   = os.environ["SUPABASE_URL"]
-SUPABASE_KEY   = os.environ["SUPABASE_KEY"]
-API_SECRET     = os.environ.get("API_SECRET", "")
+SUPABASE_URL = os.environ["SUPABASE_URL"]
+SUPABASE_KEY = os.environ["SUPABASE_KEY"]
+API_SECRET   = os.environ.get("API_SECRET", "")
 
 HEADERS = {
     "Authorization": f"Bearer {SUPABASE_KEY}",
@@ -87,22 +87,22 @@ SAFE          = 10 * mm
 TEXT_MARGIN_X = 20 * mm
 
 # Wraparound couverture (API Gelato cover-dimensions, pageCount=32)
-WRAP_W        = 458.0 * mm
-WRAP_H        = 246.0 * mm
+WRAP_W = 458.0 * mm
+WRAP_H = 246.0 * mm
 
-CONTENT_BACK_X_MM   = 20.0
-CONTENT_BACK_W_MM   = 198.0
-CONTENT_BACK_H_MM   = 206.0
-CONTENT_BACK_Y_MM   = 20.0
-SPINE_X_MM          = 226.0
-SPINE_W_MM          = 6.0
-CONTENT_FRONT_X_MM  = 240.0
-CONTENT_FRONT_W_MM  = 198.0
-CONTENT_FRONT_H_MM  = 206.0
-CONTENT_FRONT_Y_MM  = 20.0
+CONTENT_BACK_X_MM  = 20.0
+CONTENT_BACK_W_MM  = 198.0
+CONTENT_BACK_H_MM  = 206.0
+CONTENT_BACK_Y_MM  = 20.0
+SPINE_X_MM         = 226.0
+SPINE_W_MM         = 6.0
+CONTENT_FRONT_X_MM = 240.0
+CONTENT_FRONT_W_MM = 198.0
+CONTENT_FRONT_H_MM = 206.0
+CONTENT_FRONT_Y_MM = 20.0
 
-NB_SCENES  = 12
-TARGET_PX  = 2362
+NB_SCENES = 12
+TARGET_PX = 2362
 
 TEXT_FONT = F_BODY
 TEXT_SIZE = 22
@@ -298,7 +298,7 @@ def draw_faux_titre(c, titre):
 
     bar_w = 14 * mm
     c.setFillColor(HexColor(C_ORANGE))
-    c.roundRect(cx - bar_w / 2, PAGE - 52 * mm, bar_w, 1.2*mm, 0.6*mm, fill=1, stroke=0)
+    c.roundRect(cx - bar_w / 2, PAGE - 52*mm, bar_w, 1.2*mm, 0.6*mm, fill=1, stroke=0)
 
     box = 9 * mm
     label_size = 18
@@ -441,20 +441,11 @@ def draw_reassurance(c, reassurance, titre_histoire, prenom):
 
 
 def _make_book_cover(img_content, out_w=300, out_h=380):
-    """
-    Transforme une image carree en vignette style livre avec :
-    - Tranche orange Piklo sur la gauche
-    - Ombre portee douce en bas a droite
-    - Vignettage subtil sur les bords de la page
-    - Reflet leger en haut
-    Retourne un objet PIL Image RGBA.
-    """
     SPINE_COLOR = (210, 119, 75)
     SPINE_W = int(out_w * 0.06)
     pad = 16
 
     src = PILImage.open(io.BytesIO(img_content)).convert("RGBA")
-
     canvas_img = PILImage.new("RGBA", (out_w + pad, out_h + pad), (0, 0, 0, 0))
 
     # Ombre portee
@@ -467,8 +458,8 @@ def _make_book_cover(img_content, out_w=300, out_h=380):
     draw_spine = PILDraw.Draw(spine)
     for x in range(SPINE_W):
         factor = x / SPINE_W
-        c = tuple(max(0, int(ch * (0.7 + 0.3 * factor))) for ch in SPINE_COLOR)
-        draw_spine.line([(x, 0), (x, out_h - 8)], fill=(*c, 255))
+        col = tuple(max(0, int(ch * (0.7 + 0.3 * factor))) for ch in SPINE_COLOR)
+        draw_spine.line([(x, 0), (x, out_h - 8)], fill=(*col, 255))
     canvas_img.paste(spine, (0, 4), spine)
 
     # Page principale
@@ -511,7 +502,6 @@ def draw_marketing(c, tmp_dir):
     c.drawString(cx - titre_w / 2, PAGE - 40*mm, "Encore plus d'aventures !")
 
     vignette_w = 48 * mm
-    vignette_h = 60 * mm
     gap = 6 * mm
     total_w = 3 * vignette_w + 2 * gap
     start_x = cx - total_w / 2
@@ -524,26 +514,20 @@ def draw_marketing(c, tmp_dir):
                 r = requests.get(univers["url"], timeout=20)
                 r.raise_for_status()
                 book_img = _make_book_cover(r.content, out_w=300, out_h=380)
-                # Convertir en JPEG avec fond sombre pour eviter
-                # les problemes de transparence dans ReportLab
                 bg = PILImage.new("RGB", book_img.size, (56, 48, 42))
                 bg.paste(book_img, mask=book_img.split()[3])
                 book_path = os.path.join(tmp_dir, f"mktg_{i}.jpg")
                 bg.save(book_path, format="JPEG", quality=92)
-                # Calculer les dimensions en respectant le ratio
-                ratio = book_img.size[1] / book_img.size[0]
+                # Dimensions exactes, sans etirement
                 draw_w = vignette_w
-                draw_h = draw_w * ratio
-                if draw_h > vignette_h:
-                    draw_h = vignette_h
-                    draw_w = draw_h / ratio
+                draw_h = draw_w * (book_img.size[1] / book_img.size[0])
                 c.drawImage(book_path,
                             x + (vignette_w - draw_w) / 2, y_img,
                             width=draw_w, height=draw_h)
             except Exception:
-                _draw_placeholder(c, x, y_img, vignette_w, vignette_h)
+                _draw_placeholder(c, x, y_img, vignette_w, 60*mm)
         else:
-            _draw_placeholder(c, x, y_img, vignette_w, vignette_h)
+            _draw_placeholder(c, x, y_img, vignette_w, 60*mm)
 
         c.setFillColor(HexColor(C_CREME))
         if univers["titre"]:
@@ -652,7 +636,7 @@ def draw_quatrieme_interieure(c, prenom=None, univers_titre=None, univers_texte=
 
 # ── Wraparound couverture ─────────────────────────────────────────────────────
 
-def draw_wraparound(c, titre, img_path_front):
+def draw_wraparound(c, titre, img_path_front, histoire=None, prenom=None):
     # Fond creme
     c.setFillColor(HexColor(C_CREME))
     c.rect(0, 0, WRAP_W, WRAP_H, fill=1, stroke=0)
@@ -728,40 +712,88 @@ def draw_wraparound(c, titre, img_path_front):
     c.setFillColor(HexColor(C_ORANGE))
     c.roundRect(fcx - bar_w/2, fy + 11*mm, bar_w, 1.0*mm, 0.5*mm, fill=1, stroke=0)
 
-    # ── Quatrieme ─────────────────────────────────────────────────────────────
+    # ── Quatrieme de couverture ───────────────────────────────────────────────
     c.setFillColor(HexColor(C_CREME))
     c.rect(bx, by, bw, bh, fill=1, stroke=0)
 
-    box_b = 9 * mm
-    lsize_b = 18
+    # Logo
+    box_b = 13 * mm
+    lsize_b = 27
     lw_b = c.stringWidth(BRAND_NAME, F_TITLE, lsize_b)
-    gap_b = 3 * mm
-    gw_b  = box_b + gap_b + lw_b
-    draw_piklo_mark(c, bcx - gw_b/2, by + bh - 24*mm,
+    gap_b = 4 * mm
+    gw_b = box_b + gap_b + lw_b
+    draw_piklo_mark(c, bcx - gw_b / 2, by + bh - 34*mm,
                     box=box_b, gap=gap_b, label_color=C_ORANGE, label_size=lsize_b)
 
-    draw_tracked(c, "L'HISTOIRE", F_BODY_B, 8, C_SURTITRE,
-                 bcx, by + bh - 42*mm, 2.5)
+    # Surtitre
+    draw_tracked(c, "L'HISTOIRE", F_BODY_B, 10, C_SURTITRE, bcx, by + bh - 52*mm, 3.0)
 
+    # Accroche univers
+    reassurance = (histoire.get("reassurance") or {}) if histoire else {}
+    univers = reassurance.get("univers") or {}
+    accroche = (univers.get("titre") or "Une histoire rien qu'\u00e0 lui").strip()
+    acc_size = 24
+    max_w_b = bw - 2 * (SAFE + 6*mm)
+    acc_lines = wrap_text(c, accroche, F_TITLE, acc_size, max_w_b)
+    while len(acc_lines) > 2 and acc_size > 16:
+        acc_size -= 2
+        acc_lines = wrap_text(c, accroche, F_TITLE, acc_size, max_w_b)
     c.setFillColor(HexColor(C_BRUN))
-    c.setFont(F_TITLE, 16)
-    lw_titre = c.stringWidth(titre, F_TITLE, 16)
-    c.drawString(bcx - lw_titre/2, by + bh - 55*mm, titre)
+    c.setFont(F_TITLE, acc_size)
+    ay = by + bh - 68*mm
+    for line in acc_lines:
+        lw = c.stringWidth(line, F_TITLE, acc_size)
+        c.drawString(bcx - lw / 2, ay, line)
+        ay -= acc_size * 1.16
 
-    foot_top_b = by + 22*mm
+    # Paragraphe univers
+    univers_texte = univers.get("texte")
+    if univers_texte:
+        c.setFillColor(HexColor("#7C7064"))
+        c.setFont(F_BODY, 11)
+        para_lines = wrap_text(c, univers_texte.strip(), F_BODY, 11, max_w_b)
+        py = ay - 5*mm
+        for line in para_lines:
+            lw = c.stringWidth(line, F_BODY, 11)
+            c.drawString(bcx - lw / 2, py, line)
+            py -= 11 * 1.55
+    else:
+        py = ay
+
+    # Mention personnalisee
+    if prenom:
+        mention = "Une histoire cr\u00e9\u00e9e sp\u00e9cialement pour "
+        msize = 11
+        mi_w = c.stringWidth(mention, F_BODY_B, msize)
+        mp_w = c.stringWidth(prenom, F_BODY_B, msize)
+        dot_gap = 7 * mm
+        total_w = mi_w + mp_w
+        block_y = py - 12*mm
+        start_x = bcx - total_w / 2
+        c.setFillColor(HexColor(C_ORANGE))
+        c.circle(start_x - dot_gap, block_y + msize * 0.32, 1.6, fill=1, stroke=0)
+        c.setFillColor(HexColor("#8A7E70"))
+        c.setFont(F_BODY_B, msize)
+        c.drawString(start_x, block_y, mention)
+        c.setFillColor(HexColor(C_ORANGE))
+        c.drawString(start_x + mi_w, block_y, prenom)
+        c.circle(start_x + total_w + dot_gap, block_y + msize * 0.32, 1.6, fill=1, stroke=0)
+
+    # Footer
+    foot_top_b = by + 26*mm
     c.setStrokeColor(HexColor("#EADFD0"))
-    c.setLineWidth(0.5)
-    c.line(bx + 4*mm, foot_top_b, bx + bw - 4*mm, foot_top_b)
+    c.setLineWidth(0.7)
+    c.line(bx + 6*mm, foot_top_b, bx + bw - 6*mm, foot_top_b)
     c.setFillColor(HexColor(C_ORANGE))
-    c.setFont(F_BODY_B, 10)
-    c.drawString(bx + 4*mm, foot_top_b - 7*mm, BRAND_SITE)
+    c.setFont(F_BODY_B, 13)
+    c.drawString(bx + 6*mm, foot_top_b - 9*mm, BRAND_SITE)
     c.setFillColor(HexColor(C_GRIS))
-    c.setFont(F_BODY, 8)
-    c.drawString(bx + 4*mm, foot_top_b - 13*mm,
-                 "Edition personnalisee - Imprime en France - 2026")
-    c.setFont(F_BODY, 7.5)
-    c.drawString(bx + 4*mm, foot_top_b - 18*mm,
-                 "Illustrations generees par intelligence artificielle.")
+    c.setFont(F_BODY, 9)
+    c.drawString(bx + 6*mm, foot_top_b - 15*mm,
+                 "\u00c9dition personnalis\u00e9e \u00b7 Imprim\u00e9 en France \u00b7 2026")
+    c.setFont(F_BODY, 8.5)
+    c.drawString(bx + 6*mm, foot_top_b - 20*mm,
+                 "Illustrations g\u00e9n\u00e9r\u00e9es par intelligence artificielle.")
 
     # ── Tranche ───────────────────────────────────────────────────────────────
     c.setFillColor(HexColor(C_ORANGE))
@@ -816,7 +848,7 @@ def assembler_pdf_gelato(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
             _download_image(real_url, path)
             img_paths[pid] = path
 
-        # PDF interieur (31 pages = 1 endpaper + 29 contenu + 1 endpaper)
+        # PDF interieur
         interior_path = os.path.join(tmp, "interior.pdf")
         c = canvas.Canvas(interior_path, pagesize=(PAGE, PAGE))
 
@@ -841,7 +873,8 @@ def assembler_pdf_gelato(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
         # PDF couverture wraparound
         cover_path = os.path.join(tmp, "cover.pdf")
         cc = canvas.Canvas(cover_path, pagesize=(WRAP_W, WRAP_H))
-        draw_wraparound(cc, titre, img_paths[pages_ok[0]["id"]])
+        draw_wraparound(cc, titre, img_paths[pages_ok[0]["id"]],
+                        histoire=histoire, prenom=prenom)
         cc.save()
 
         with open(interior_path, "rb") as f:
