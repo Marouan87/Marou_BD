@@ -29,7 +29,7 @@ from reportlab.lib.units import mm
 from reportlab.lib.colors import HexColor, Color
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from PIL import Image as PILImage
+from PIL import Image as PILImage, ImageDraw as PILDraw, ImageFilter as PILFilter
 
 app = Flask(__name__)
 
@@ -120,16 +120,16 @@ PALETTE_DEFAUT = 0
 # ── Assets statiques page marketing ──────────────────────────────────────────
 UNIVERS_MARKETING = [
     {
-        "titre": "Alma arrête la tetine",
+        "titre": "Alma arrete la tetine",
         "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/7d72a7c5-3ac9-410f-9ea7-0897f7112cc7/6153f3e8-42c0-4cfe-b0d0-41bd4bae8cbc.png",
     },
     {
-        "titre": "Nael découvre le Maroc",
+        "titre": "Nael au Maroc",
         "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/b0e55298-7aec-47c2-a4e1-c2d66cbe4430/4f00da94-2683-4357-80fd-8be9e5740c6f.png",
     },
     {
-        "titre": "Noah a une petite soeur !",
-        "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/5dcc76fd-57e6-4c0a-a11e-1d6957abba09/e88e6e4a-103d-47e9-951f-4ef2234c997c.png",
+        "titre": "Le petit frere arrive",
+        "url": None,  # TODO : remplacer par l'URL Supabase quand disponible
     },
 ]
 
@@ -440,6 +440,64 @@ def draw_reassurance(c, reassurance, titre_histoire, prenom):
     c.showPage()
 
 
+def _make_book_cover(img_content, out_w=300, out_h=380):
+    """
+    Transforme une image carree en vignette style livre avec :
+    - Tranche orange Piklo sur la gauche
+    - Ombre portee douce en bas a droite
+    - Vignettage subtil sur les bords de la page
+    - Reflet leger en haut
+    Retourne un objet PIL Image RGBA.
+    """
+    SPINE_COLOR = (210, 119, 75)
+    SPINE_W = int(out_w * 0.06)
+    pad = 16
+
+    src = PILImage.open(io.BytesIO(img_content)).convert("RGBA")
+
+    canvas_img = PILImage.new("RGBA", (out_w + pad, out_h + pad), (0, 0, 0, 0))
+
+    # Ombre portee
+    shadow = PILImage.new("RGBA", (out_w - SPINE_W + 4, out_h - 8), (0, 0, 0, 70))
+    shadow = shadow.filter(PILFilter.GaussianBlur(6))
+    canvas_img.paste(shadow, (SPINE_W + 6, 10), shadow)
+
+    # Tranche avec degrade
+    spine = PILImage.new("RGBA", (SPINE_W, out_h - 8), (*SPINE_COLOR, 255))
+    draw_spine = PILDraw.Draw(spine)
+    for x in range(SPINE_W):
+        factor = x / SPINE_W
+        c = tuple(max(0, int(ch * (0.7 + 0.3 * factor))) for ch in SPINE_COLOR)
+        draw_spine.line([(x, 0), (x, out_h - 8)], fill=(*c, 255))
+    canvas_img.paste(spine, (0, 4), spine)
+
+    # Page principale
+    page_w = out_w - SPINE_W
+    page_h = out_h - 8
+    page_img = src.resize((page_w, page_h), PILImage.LANCZOS)
+
+    # Vignettage bords
+    vignette = PILImage.new("RGBA", (page_w, page_h), (0, 0, 0, 0))
+    vdraw = PILDraw.Draw(vignette)
+    for i in range(10):
+        alpha = int(25 * (1 - i / 10))
+        vdraw.rectangle([i, i, page_w - i - 1, page_h - i - 1],
+                        outline=(0, 0, 0, alpha))
+    page_combined = PILImage.alpha_composite(page_img, vignette)
+    canvas_img.paste(page_combined, (SPINE_W, 4), page_combined)
+
+    # Reflet haut
+    reflet_h = int(page_h * 0.12)
+    reflet = PILImage.new("RGBA", (page_w, reflet_h), (0, 0, 0, 0))
+    rdraw = PILDraw.Draw(reflet)
+    for y in range(reflet_h):
+        alpha = int(20 * (1 - y / reflet_h))
+        rdraw.line([(0, y), (page_w, y)], fill=(255, 255, 255, alpha))
+    canvas_img.paste(reflet, (SPINE_W, 4), reflet)
+
+    return canvas_img
+
+
 def draw_marketing(c, tmp_dir):
     cx = PAGE / 2
     c.setFillColor(HexColor(C_BRUN))
@@ -453,22 +511,26 @@ def draw_marketing(c, tmp_dir):
     c.drawString(cx - titre_w / 2, PAGE - 40*mm, "Encore plus d'aventures !")
 
     vignette_w = 48 * mm
-    vignette_h = 48 * mm
+    vignette_h = 60 * mm
     gap = 6 * mm
     total_w = 3 * vignette_w + 2 * gap
     start_x = cx - total_w / 2
-    y_img = PAGE / 2 - 4*mm
+    y_img = PAGE / 2 - 8*mm
 
     for i, univers in enumerate(UNIVERS_MARKETING):
         x = start_x + i * (vignette_w + gap)
         if univers["url"]:
             try:
-                img_path = os.path.join(tmp_dir, f"mktg_{i}.jpg")
                 r = requests.get(univers["url"], timeout=20)
                 r.raise_for_status()
-                _prepare_image(r.content, img_path)
-                c.drawImage(img_path, x, y_img, width=vignette_w,
-                            height=vignette_h, preserveAspectRatio=False)
+                book_img = _make_book_cover(r.content,
+                                            out_w=int(vignette_w / mm * 3.78),
+                                            out_h=int(vignette_h / mm * 3.78))
+                book_path = os.path.join(tmp_dir, f"mktg_{i}.png")
+                book_img.save(book_path, format="PNG")
+                c.drawImage(book_path, x, y_img, width=vignette_w,
+                            height=vignette_h, preserveAspectRatio=True,
+                            mask="auto")
             except Exception:
                 _draw_placeholder(c, x, y_img, vignette_w, vignette_h)
         else:
