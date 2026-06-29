@@ -1,7 +1,17 @@
 """
-API Flask - Assemblage PDF livre illustré
+API Flask - Assemblage PDF livre illustre (version IMPRESSION Prodigi)
 POST /generate-pdf  { "histoire_id": "uuid" }
-Réponse : { "pdf_url": "https://..." } après upload dans Supabase Storage
+Reponse : { "pdf_url": "https://..." } apres upload dans Supabase Storage
+
+Format de sortie conforme aux specs Prodigi hardcover carre 21x21 cm :
+- Pages SIMPLES carrees 210x210 mm (pas de double-page)
+- Premiere page du PDF = couverture avant
+- Derniere page du PDF = quatrieme de couverture
+- Entre les deux : pour chaque scene, une page texte puis une page illustration
+- 10 scenes => 1 + (10 x 2) + 1 = 22 pages (pair, sous le forfait 24 pages)
+- Pas de fond perdu ni de traits de coupe (Prodigi les genere)
+- Elements importants gardes a >= 10 mm des bords (zone de securite)
+- Images preparees pour viser 300 dpi (≈ 2480 px sur 210 mm)
 """
 
 import os
@@ -21,10 +31,7 @@ from PIL import Image as PILImage
 
 app = Flask(__name__)
 
-# ─── Polices Unicode (accents francais) ────────────────────────────────────────
-# DejaVu Sans gere les accents, contrairement aux polices Helvetica integrees.
-# On cherche d'abord la version embarquee dans le projet (dossier fonts/),
-# avec repli sur le chemin systeme Linux.
+# --- Polices Unicode (accents francais) ---
 _FONT_DIR = os.path.dirname(os.path.abspath(__file__))
 _SYS_DIR = "/usr/share/fonts/truetype/dejavu"
 
@@ -40,8 +47,7 @@ pdfmetrics.registerFont(TTFont("DejaVu", _font_path("DejaVuSans.ttf")))
 pdfmetrics.registerFont(TTFont("DejaVu-Bold", _font_path("DejaVuSans-Bold.ttf")))
 pdfmetrics.registerFont(TTFont("DejaVu-Oblique", _font_path("DejaVuSans-Oblique.ttf")))
 
-# Polices de marque Piklo (Quicksand pour les titres, Nunito pour le corps).
-# Si un fichier manque on retombe sur DejaVu pour ne pas casser la generation.
+
 def _register_brand_fonts():
     brand = {
         "Quicksand-Bold":  ("Quicksand-Bold.ttf",  "DejaVu-Bold"),
@@ -60,41 +66,47 @@ def _register_brand_fonts():
     return resolved
 
 BRAND_FONTS = _register_brand_fonts()
-F_TITLE   = BRAND_FONTS["Quicksand-Bold"]   # titre couverture + mot "Piklo"
-F_BODY    = BRAND_FONTS["Nunito"]           # surtitre, mentions
+F_TITLE   = BRAND_FONTS["Quicksand-Bold"]
+F_BODY    = BRAND_FONTS["Nunito"]
 F_BODY_B  = BRAND_FONTS["Nunito-Bold"]
 F_ITALIC  = BRAND_FONTS["Nunito-Italic"]
 
 SUPABASE_URL = os.environ["SUPABASE_URL"]
 SUPABASE_KEY = os.environ["SUPABASE_KEY"]
-API_SECRET   = os.environ.get("API_SECRET", "")   # optionnel, pour sécuriser l'endpoint
+API_SECRET   = os.environ.get("API_SECRET", "")
 
 HEADERS = {
     "Authorization": f"Bearer {SUPABASE_KEY}",
     "apikey": SUPABASE_KEY,
 }
 
-# ─── Dimensions ───────────────────────────────────────────────────────────────
-PAGE_W  = 360 * mm
-PAGE_H  = 180 * mm
-HALF_W  = PAGE_W / 2
-TEXT_MARGIN_X = 30 * mm
+# --- Dimensions IMPRESSION (page simple carree Prodigi 21x21) ---
+PAGE = 210 * mm          # cote de la page carree
+SAFE = 10 * mm           # zone de securite Prodigi : rien d'important au-dela
+TEXT_MARGIN_X = 22 * mm  # marge horizontale du bloc texte (> SAFE)
+
+# Nombre de scenes attendu pour rester dans le forfait 24 pages.
+NB_SCENES = 10
 
 FONT_NAME = "DejaVu-Bold"
-FONT_SIZE = 22
+FONT_SIZE = 24
 
-# Palette alignee sur la visionneuse Piklo : (fond, couleur du texte)
+# Palette (fond, couleur du texte) - identique a la visionneuse
 PALETTE = [
-    ("#D2774B", "#FFFFFF"),  # Orange Piklo
-    ("#FFF7EE", "#38302A"),  # Creme
-    ("#F4E8D6", "#5A4632"),  # Sable
-    ("#F6E3DE", "#6A4138"),  # Blush
-    ("#E7EDE3", "#3C4A36"),  # Sauge
-    ("#E4ECF2", "#33414E"),  # Ciel
+    ("#D2774B", "#FFFFFF"),
+    ("#FFF7EE", "#38302A"),
+    ("#F4E8D6", "#5A4632"),
+    ("#F6E3DE", "#6A4138"),
+    ("#E7EDE3", "#3C4A36"),
+    ("#E4ECF2", "#33414E"),
 ]
-PALETTE_DEFAUT = 0  # Orange Piklo par defaut
+PALETTE_DEFAUT = 0
 
-# ─── Supabase ─────────────────────────────────────────────────────────────────
+# Resolution cible pour l'impression : 300 dpi sur 210 mm.
+# 210 mm = 8.2677 in ; 8.2677 * 300 ≈ 2480 px.
+TARGET_PX = 2480
+
+# --- Supabase ---
 
 def fetch_histoire(histoire_id):
     r = requests.get(
@@ -124,11 +136,6 @@ def fetch_pages(histoire_id):
 
 
 def fetch_heros_nom():
-    """
-    Recupere le prenom du personnage principal (role = 'enfant').
-    Retourne None si aucun, pour que la couverture retombe sur la
-    mention generique sans planter.
-    """
     try:
         r = requests.get(
             f"{SUPABASE_URL}/rest/v1/personnages",
@@ -145,9 +152,8 @@ def fetch_heros_nom():
 
 
 def upload_pdf(pdf_bytes: bytes, histoire_id: str, palette_id: int) -> str:
-    # Un fichier distinct par couleur : l'URL change quand la palette change,
-    # ce qui evite que le navigateur resserve un ancien PDF depuis son cache.
-    filename = f"{histoire_id}_p{palette_id}.pdf"
+    # Suffixe _print pour distinguer le PDF d'impression de tout autre fichier.
+    filename = f"{histoire_id}_p{palette_id}_print.pdf"
     r = requests.post(
         f"{SUPABASE_URL}/storage/v1/object/pdfs/{filename}",
         headers={
@@ -162,9 +168,6 @@ def upload_pdf(pdf_bytes: bytes, histoire_id: str, palette_id: int) -> str:
 
 
 def save_pdf_cache(histoire_id: str, contenu: dict, pdf_url: str, palette_id: int):
-    """Memorise dans contenu l'URL du PDF et la palette avec laquelle il a ete
-    genere, pour pouvoir resservir le cache sans re-generer si la palette ne
-    change pas."""
     new_contenu = dict(contenu or {})
     new_contenu["pdf_url"] = pdf_url
     new_contenu["pdf_palette_id"] = palette_id
@@ -176,33 +179,7 @@ def save_pdf_cache(histoire_id: str, contenu: dict, pdf_url: str, palette_id: in
     )
     r.raise_for_status()
 
-# ─── Dessin ───────────────────────────────────────────────────────────────────
-
-def draw_star(c, cx, cy, r):
-    points = []
-    for i in range(10):
-        angle = math.pi / 2 + i * math.pi / 5
-        radius = r if i % 2 == 0 else r * 0.45
-        points.append((cx + radius * math.cos(angle), cy + radius * math.sin(angle)))
-    p = c.beginPath()
-    p.moveTo(*points[0])
-    for pt in points[1:]:
-        p.lineTo(*pt)
-    p.close()
-    c.drawPath(p, fill=1, stroke=0)
-
-
-def draw_stars(c, x_offset, width, height, color_hex, n=10, seed=0):
-    rng = random.Random(seed)
-    base = HexColor(color_hex)
-    star_color = Color(max(0, base.red - 0.12), max(0, base.green - 0.12), max(0, base.blue - 0.12))
-    c.setFillColor(star_color)
-    for _ in range(n):
-        sx = x_offset + rng.uniform(15 * mm, width - 15 * mm)
-        sy = rng.uniform(15 * mm, height - 15 * mm)
-        size = rng.uniform(3 * mm, 6 * mm)
-        draw_star(c, sx, sy, size)
-
+# --- Texte ---
 
 def wrap_text(c, text, font, size, max_width):
     words = text.split()
@@ -220,85 +197,87 @@ def wrap_text(c, text, font, size, max_width):
     return lines
 
 
-def draw_text_page(c, legende, bg_hex, fg_hex, x_offset=0):
+def draw_text_page(c, legende, bg_hex, fg_hex):
+    """Page simple carree : fond uni + legende centree, dans la zone de securite."""
     c.setFillColor(HexColor(bg_hex))
-    c.rect(x_offset, 0, HALF_W, PAGE_H, fill=1, stroke=0)
+    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
 
     c.setFillColor(HexColor(fg_hex))
     c.setFont(FONT_NAME, FONT_SIZE)
-    available_w = HALF_W - 2 * TEXT_MARGIN_X
+    available_w = PAGE - 2 * TEXT_MARGIN_X
     lines = wrap_text(c, legende, FONT_NAME, FONT_SIZE, available_w)
     line_height = FONT_SIZE * 1.5
     total_h = len(lines) * line_height
-    y_start = (PAGE_H + total_h) / 2 - line_height * 0.8
+    y_start = (PAGE + total_h) / 2 - line_height * 0.8
     for i, line in enumerate(lines):
         y = y_start - i * line_height
         text_w = c.stringWidth(line, FONT_NAME, FONT_SIZE)
-        x = x_offset + (HALF_W - text_w) / 2
+        x = (PAGE - text_w) / 2
         c.drawString(x, y, line)
+    c.showPage()
 
 
-def draw_image_page(c, img_path, x_offset=0):
+def draw_image_page(c, img_path):
+    """Page simple carree : illustration plein cadre (l'image est deja carree)."""
     c.setFillColor(HexColor("#F5F5F5"))
-    c.rect(x_offset, 0, HALF_W, PAGE_H, fill=1, stroke=0)
-    c.drawImage(img_path, x_offset, 0, width=HALF_W, height=PAGE_H, preserveAspectRatio=False)
+    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
+    c.drawImage(img_path, 0, 0, width=PAGE, height=PAGE, preserveAspectRatio=False)
+    c.showPage()
 
-
-# Nom de travail provisoire de l'outil, a remplacer le jour de la commercialisation
-# ─── Marque Piklo (4e de couverture) ──────────────────────────────────────────
+# --- Marque Piklo ---
 BRAND_NAME     = "Piklo"
-BRAND_BASELINE = "Chaque histoire mérite son héros."
+BRAND_BASELINE = "Chaque histoire merite son heros."
 BRAND_SITE     = "studiopiklo.com"
 
-# Tokens couleur (alignes sur la maquette Claude Design)
-C_CREME    = "#FFF7EE"   # fond 4e de couv
-C_ORANGE   = "#D2774B"   # orange chaud Piklo
-C_ORANGE2  = "#E6AC63"   # haut du degrade du logo
-C_BRUN     = "#38302A"   # brun texte
-C_GRIS     = "#9A9AA8"   # mentions secondaires
-C_SURTITRE = "#F0C99B"   # surtitre sur l'illustration (premiere de couv)
+C_CREME    = "#FFF7EE"
+C_ORANGE   = "#D2774B"
+C_ORANGE2  = "#E6AC63"
+C_BRUN     = "#38302A"
+C_GRIS     = "#9A9AA8"
+C_SURTITRE = "#F0C99B"
 
 
 def draw_piklo_mark(c, x, y, box=11 * mm, gap=3.2 * mm, label_color="#FFF7EE",
                     label_size=23, with_label=True):
-    """Logo Piklo : carre arrondi degrade orange + disque creme, suivi de 'Piklo'.
-    (x, y) = coin bas-gauche du carre. Le degrade est approxime par un aplat
-    orange (ReportLab ne fait pas de degrade lineaire simple sur un rect)."""
-    # Carre arrondi
     c.setFillColor(HexColor(C_ORANGE))
     c.roundRect(x, y, box, box, box * 0.32, fill=1, stroke=0)
-    # Disque creme centre
     c.setFillColor(HexColor(C_CREME))
     r = box * 0.17
     c.circle(x + box / 2, y + box / 2, r, fill=1, stroke=0)
-    # Mot "Piklo"
     if with_label:
         c.setFillColor(HexColor(label_color))
         c.setFont(F_TITLE, label_size)
         c.drawString(x + box + gap, y + (box - label_size * 0.72) / 2, BRAND_NAME)
 
 
-def draw_cover(c, titre, img_path, enfant_nom=None):
-    """
-    Double page de couverture en mode impression.
-    Moitie gauche  : quatrieme de couverture (page de garde)
-    Moitie droite  : premiere de couverture, illustration plein cadre + titre en bas
-    """
-    # ══ Moitie droite : PREMIERE DE COUVERTURE (maquette plein cadre) ══
-    # Illustration plein cadre sur toute la demi-page droite
-    c.drawImage(img_path, HALF_W, 0, width=HALF_W, height=PAGE_H,
+def draw_tracked(c, text, font, size, color, center_x, y, tracking):
+    c.setFillColor(HexColor(color))
+    c.setFont(font, size)
+    widths = [c.stringWidth(ch, font, size) for ch in text]
+    total = sum(widths) + tracking * (len(text) - 1)
+    x = center_x - total / 2
+    for ch, w in zip(text, widths):
+        c.drawString(x, y, ch)
+        x += w + tracking
+
+
+def draw_front_cover(c, titre, img_path):
+    """Premiere page du PDF : couverture avant, page simple carree.
+    Illustration plein cadre + scrims + logo + titre en bas."""
+    cx = PAGE / 2
+
+    c.drawImage(img_path, 0, 0, width=PAGE, height=PAGE,
                 preserveAspectRatio=True, anchor='c')
 
-    # Scrim sombre en bas (lisibilite du titre). Approxime par bandes empilees
-    # de transparence croissante, du bas (opaque) vers le haut (transparent).
+    # Scrim sombre en bas (lisibilite du titre)
     scrim_h = 95 * mm
     bands = 90
     bh = scrim_h / bands
     for i in range(bands):
-        frac = i / (bands - 1)               # 0 en bas, 1 en haut
+        frac = i / (bands - 1)
         alpha = 0.86 * (1 - frac) ** 1.6
         c.setFillColor(Color(28 / 255, 17 / 255, 9 / 255, alpha=alpha))
-        c.rect(HALF_W, i * bh, HALF_W, bh + 1.2, fill=1, stroke=0)
+        c.rect(0, i * bh, PAGE, bh + 1.2, fill=1, stroke=0)
 
     # Scrim leger en haut (pour le logo)
     top_h = 40 * mm
@@ -308,36 +287,23 @@ def draw_cover(c, titre, img_path, enfant_nom=None):
         frac = i / (tbands - 1)
         alpha = 0.42 * (1 - frac) ** 1.6
         c.setFillColor(Color(34 / 255, 22 / 255, 12 / 255, alpha=alpha))
-        c.rect(HALF_W, PAGE_H - (i + 1) * tbh, HALF_W, tbh + 1.2, fill=1, stroke=0)
+        c.rect(0, PAGE - (i + 1) * tbh, PAGE, tbh + 1.2, fill=1, stroke=0)
 
-    # Logo Piklo (haut gauche de la couverture)
-    draw_piklo_mark(c, HALF_W + 12 * mm, PAGE_H - 22 * mm,
+    # Logo Piklo (haut gauche, dans la zone de securite)
+    draw_piklo_mark(c, SAFE + 2 * mm, PAGE - 22 * mm,
                     label_color=C_CREME, label_size=21)
 
-    # Bloc titre, centre en bas
-    cx = HALF_W + HALF_W / 2          # centre horizontal de la demi-page droite
     # Surtitre
-    surtitre = "UNE HISTOIRE PERSONNALISÉE"
-    c.setFillColor(HexColor(C_SURTITRE))
-    c.setFont(F_BODY_B, 9)
-    # interlettrage manuel pour l'effet "letter-spacing"
-    def draw_tracked(text, font, size, color, center_x, y, tracking):
-        c.setFillColor(HexColor(color))
-        c.setFont(font, size)
-        widths = [c.stringWidth(ch, font, size) for ch in text]
-        total = sum(widths) + tracking * (len(text) - 1)
-        x = center_x - total / 2
-        for ch, w in zip(text, widths):
-            c.drawString(x, y, ch)
-            x += w + tracking
-    draw_tracked(surtitre, F_BODY_B, 9, C_SURTITRE, cx, 60 * mm, 2.4)
+    draw_tracked(c, "UNE HISTOIRE PERSONNALISEE", F_BODY_B, 9, C_SURTITRE,
+                 cx, 60 * mm, 2.4)
 
-    # Titre principal (Quicksand), centre, peut tenir sur 2 lignes
+    # Titre principal, centre, 2 lignes max, dans la zone de securite
     title_size = 38
-    tlines = wrap_text(c, titre, F_TITLE, title_size, HALF_W - 30 * mm)
+    max_w = PAGE - 2 * (SAFE + 8 * mm)
+    tlines = wrap_text(c, titre, F_TITLE, title_size, max_w)
     while len(tlines) > 2 and title_size > 24:
         title_size -= 2
-        tlines = wrap_text(c, titre, F_TITLE, title_size, HALF_W - 30 * mm)
+        tlines = wrap_text(c, titre, F_TITLE, title_size, max_w)
     c.setFillColor(HexColor(C_CREME))
     c.setFont(F_TITLE, title_size)
     line_h = title_size * 1.12
@@ -347,61 +313,61 @@ def draw_cover(c, titre, img_path, enfant_nom=None):
         c.drawString(cx - lw / 2, ty, line)
         ty -= line_h
 
-    # Petit trait orange sous le titre
+    # Trait orange sous le titre
     bar_w = 18 * mm
     c.setFillColor(HexColor(C_ORANGE))
-    c.roundRect(cx - bar_w / 2, 31 * mm, bar_w, 1.4 * mm, 0.7 * mm,
-                fill=1, stroke=0)
+    c.roundRect(cx - bar_w / 2, 31 * mm, bar_w, 1.4 * mm, 0.7 * mm, fill=1, stroke=0)
 
-    # ══ Moitie gauche : QUATRIEME DE COUVERTURE (page de garde) ══
+    c.showPage()
+
+
+def draw_back_cover(c, enfant_nom=None):
+    """Derniere page du PDF : quatrieme de couverture, page simple carree."""
+    cx = PAGE / 2
+
     c.setFillColor(HexColor(C_CREME))
-    c.rect(0, 0, HALF_W, PAGE_H, fill=1, stroke=0)
+    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
 
-    lcx = HALF_W / 2   # centre horizontal de la demi-page gauche
-
-    # Logo Piklo + "Piklo" en haut, centre
+    # Logo + "Piklo" en haut, centre
     box = 12 * mm
     label_size = 26
     label_w = c.stringWidth(BRAND_NAME, F_TITLE, label_size)
     gap = 3.5 * mm
     group_w = box + gap + label_w
-    gx = lcx - group_w / 2
-    gy = PAGE_H - 40 * mm
+    gx = cx - group_w / 2
+    gy = PAGE - 48 * mm
     draw_piklo_mark(c, gx, gy, box=box, gap=gap,
                     label_color=C_ORANGE, label_size=label_size)
 
-    # Baseline sous le logo
+    # Baseline
     c.setFillColor(HexColor(C_BRUN))
     c.setFont(F_BODY, 13)
     bw = c.stringWidth(BRAND_BASELINE, F_BODY, 13)
-    c.drawString(lcx - bw / 2, PAGE_H - 52 * mm, BRAND_BASELINE)
+    c.drawString(cx - bw / 2, PAGE - 60 * mm, BRAND_BASELINE)
 
-    # Mention de personnalisation, sur une seule ligne, centree.
-    # Forme : "Une histoire imaginée pour Nael" (intro brun italique, prenom orange).
+    # Mention personnalisee, centree
     prenom = (enfant_nom or "votre enfant").strip()
-    intro = "Une histoire imaginée pour "
+    intro = "Une histoire imaginee pour "
     size = 15
     iw = c.stringWidth(intro, F_ITALIC, size)
     pw = c.stringWidth(prenom, F_ITALIC, size)
     total = iw + pw
-    mx = lcx - total / 2
-    my = PAGE_H / 2
+    mx = cx - total / 2
+    my = PAGE / 2
     c.setFont(F_ITALIC, size)
     c.setFillColor(HexColor(C_BRUN))
     c.drawString(mx, my, intro)
     c.setFillColor(HexColor(C_ORANGE))
     c.drawString(mx + iw, my, prenom)
 
-    # CTA : site en orange gras, centre
-    cta_intro = "Créez la vôtre sur"
-    c.setFillColor(HexColor(C_GRIS))
+    # CTA site
+    cta_intro = "Creez la votre sur"
     c.setFont(F_BODY, 12)
     ci_w = c.stringWidth(cta_intro, F_BODY, 12)
-    c.setFont(F_BODY_B, 12)
     site_w = c.stringWidth(BRAND_SITE, F_BODY_B, 12)
     cta_total = ci_w + 2 * mm + site_w
-    cta_x = lcx - cta_total / 2
-    cta_y = 38 * mm
+    cta_x = cx - cta_total / 2
+    cta_y = 50 * mm
     c.setFillColor(HexColor(C_GRIS))
     c.setFont(F_BODY, 12)
     c.drawString(cta_x, cta_y, cta_intro)
@@ -409,22 +375,37 @@ def draw_cover(c, titre, img_path, enfant_nom=None):
     c.setFont(F_BODY_B, 12)
     c.drawString(cta_x + ci_w + 2 * mm, cta_y, BRAND_SITE)
 
-    # Mentions legales completes (pied)
+    # Mentions legales (au-dessus de la zone de securite basse)
     c.setFillColor(HexColor(C_GRIS))
     c.setFont(F_BODY, 9)
     legal_lines = [
-        "Histoire et illustrations générées par intelligence artificielle.",
-        f"© 2026 Piklo — {BRAND_SITE}. Tous droits réservés.",
+        "Histoire et illustrations generees par intelligence artificielle.",
+        f"(c) 2026 Piklo - {BRAND_SITE}. Tous droits reserves.",
     ]
-    ly = 26 * mm
-    for line in legal_lines:
+    ly = SAFE + 8 * mm
+    for line in reversed(legal_lines):
         lw = c.stringWidth(line, F_BODY, 9)
-        c.drawString(lcx - lw / 2, ly, line)
-        ly -= 13
+        c.drawString(cx - lw / 2, ly, line)
+        ly += 13
 
     c.showPage()
 
-# ─── Assemblage ───────────────────────────────────────────────────────────────
+# --- Assemblage ---
+
+def _prepare_image(content: bytes, path: str):
+    """Charge l'image, la met en RGB, la recadre en carre si besoin, et
+    l'upscale vers TARGET_PX (300 dpi sur 210 mm) si elle est plus petite."""
+    img = PILImage.open(io.BytesIO(content)).convert("RGB")
+    w, h = img.size
+    if w != h:
+        cote = min(w, h)
+        left = (w - cote) // 2
+        top = (h - cote) // 2
+        img = img.crop((left, top, left + cote, top + cote))
+    if img.size[0] < TARGET_PX:
+        img = img.resize((TARGET_PX, TARGET_PX), PILImage.LANCZOS)
+    img.save(path, format="JPEG", quality=95, dpi=(300, 300))
+
 
 def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
     if histoire is None:
@@ -434,9 +415,11 @@ def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
     pages_ok = [p for p in pages if p.get("image_url")]
 
     if not pages_ok:
-        raise ValueError("Aucune page avec image_url trouvée.")
+        raise ValueError("Aucune page avec image_url trouvee.")
 
-    # Couleur unique choisie dans la visionneuse, appliquee a toutes les pages texte
+    # On borne a NB_SCENES (10) pour rester dans le forfait Prodigi 24 pages.
+    pages_ok = pages_ok[:NB_SCENES]
+
     try:
         idx = int(palette_id)
     except (TypeError, ValueError):
@@ -446,9 +429,6 @@ def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
     bg_hex, fg_hex = PALETTE[idx]
 
     with tempfile.TemporaryDirectory() as tmp:
-        # Télécharger les images
-        # On reconstruit l'URL réelle : les fichiers sont rangés dans
-        # le bucket sous images/{histoire_id}/{page_id}.png
         img_paths = {}
         for page in pages_ok:
             pid = page["id"]
@@ -459,34 +439,33 @@ def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
             )
             r = requests.get(real_url, timeout=30)
             r.raise_for_status()
-            img = PILImage.open(io.BytesIO(r.content)).convert("RGB")
-            img.save(path, format="JPEG", quality=95)
+            _prepare_image(r.content, path)
             img_paths[pid] = path
 
-        # Générer le PDF en mémoire
         pdf_path = os.path.join(tmp, "livre.pdf")
-        c = canvas.Canvas(pdf_path, pagesize=(PAGE_W, PAGE_H))
+        c = canvas.Canvas(pdf_path, pagesize=(PAGE, PAGE))
 
-        # Couverture double page (4e de couv a gauche, couverture avant a droite)
+        # 1) Couverture avant (page simple) : illustration de la 1re scene
         enfant_nom = fetch_heros_nom()
-        draw_cover(c, titre, img_paths[pages_ok[0]["id"]], enfant_nom=enfant_nom)
+        draw_front_cover(c, titre, img_paths[pages_ok[0]["id"]])
 
-        # Double pages : meme couleur de fond/texte sur toutes les pages
-        for i, page in enumerate(pages_ok):
-            draw_text_page(c, page.get("legende", ""), bg_hex, fg_hex, x_offset=0)
-            draw_image_page(c, img_paths[page["id"]], x_offset=HALF_W)
-            c.showPage()
+        # 2) Pour chaque scene : page texte puis page illustration
+        for page in pages_ok:
+            draw_text_page(c, page.get("legende", ""), bg_hex, fg_hex)
+            draw_image_page(c, img_paths[page["id"]])
+
+        # 3) Quatrieme de couverture (page simple)
+        draw_back_cover(c, enfant_nom=enfant_nom)
 
         c.save()
 
         with open(pdf_path, "rb") as f:
             pdf_bytes = f.read()
 
-    # Upload dans Supabase Storage (un fichier par palette)
     pdf_url = upload_pdf(pdf_bytes, histoire_id, idx)
     return pdf_url, idx
 
-# ─── Routes ───────────────────────────────────────────────────────────────────
+# --- Routes ---
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -495,7 +474,6 @@ def health():
 
 @app.route("/generate-pdf", methods=["POST"])
 def generate_pdf():
-    # Vérification secret optionnelle
     if API_SECRET:
         token = request.headers.get("X-API-Secret", "")
         if token != API_SECRET:
@@ -507,9 +485,8 @@ def generate_pdf():
 
     histoire_id = data["histoire_id"]
     palette_id = data.get("palette_id", PALETTE_DEFAUT)
-    force = bool(data.get("force", False))   # optionnel : force la regeneration
+    force = bool(data.get("force", False))
 
-    # Normalise la palette demandee de la meme facon que la generation
     try:
         wanted = int(palette_id)
     except (TypeError, ValueError):
@@ -523,7 +500,6 @@ def generate_pdf():
         cached_url = contenu.get("pdf_url")
         cached_palette = contenu.get("pdf_palette_id")
 
-        # Cache hit : meme couleur + PDF deja genere -> aucun rendu, URL directe
         if not force and cached_url and cached_palette == wanted:
             return jsonify({
                 "pdf_url": cached_url,
@@ -531,7 +507,6 @@ def generate_pdf():
                 "cached": True,
             })
 
-        # Sinon : (re)generation pour cette couleur, puis mise a jour du cache
         pdf_url, used_palette = assembler_pdf(
             histoire_id, palette_id=wanted, histoire=histoire
         )
