@@ -112,7 +112,7 @@ def fetch_histoire(histoire_id):
     r = requests.get(
         f"{SUPABASE_URL}/rest/v1/histoires",
         headers=HEADERS,
-        params={"id": f"eq.{histoire_id}", "select": "id,titre,theme,contenu"},
+        params={"id": f"eq.{histoire_id}", "select": "id,titre,theme,contenu,reassurance"},
     )
     r.raise_for_status()
     data = r.json()
@@ -226,7 +226,7 @@ def draw_image_page(c, img_path):
 
 # --- Marque Piklo ---
 BRAND_NAME     = "Piklo"
-BRAND_BASELINE = "Chaque histoire merite son heros."
+BRAND_BASELINE = "Chaque histoire m\u00e9rite son h\u00e9ros."
 BRAND_SITE     = "studiopiklo.com"
 
 C_CREME    = "#FFF7EE"
@@ -321,72 +321,101 @@ def draw_front_cover(c, titre, img_path):
     c.showPage()
 
 
-def draw_back_cover(c, enfant_nom=None):
-    """Derniere page du PDF : quatrieme de couverture, page simple carree."""
+def draw_back_cover(c, enfant_nom=None, univers_titre=None, univers_texte=None):
+    """Derniere page du PDF : quatrieme de couverture riche, page simple carree.
+    Structure facon editeur : logo, surtitre, accroche (titre d'univers),
+    paragraphe de presentation (texte d'univers), mention personnalisee
+    encadree de points, puis pied (site, edition, mention IA)."""
     cx = PAGE / 2
 
     c.setFillColor(HexColor(C_CREME))
     c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
 
-    # Logo + "Piklo" en haut, centre
-    box = 12 * mm
-    label_size = 26
+    # ── Logo + "Piklo" en haut, centre ──
+    box = 13 * mm
+    label_size = 27
     label_w = c.stringWidth(BRAND_NAME, F_TITLE, label_size)
-    gap = 3.5 * mm
+    gap = 4 * mm
     group_w = box + gap + label_w
     gx = cx - group_w / 2
-    gy = PAGE - 48 * mm
+    gy = PAGE - 34 * mm
     draw_piklo_mark(c, gx, gy, box=box, gap=gap,
                     label_color=C_ORANGE, label_size=label_size)
 
-    # Baseline
-    c.setFillColor(HexColor(C_BRUN))
-    c.setFont(F_BODY, 13)
-    bw = c.stringWidth(BRAND_BASELINE, F_BODY, 13)
-    c.drawString(cx - bw / 2, PAGE - 60 * mm, BRAND_BASELINE)
+    # ── Surtitre "L'HISTOIRE" en interlettrage dore ──
+    draw_tracked(c, "L'HISTOIRE", F_BODY_B, 10, C_SURTITRE, cx, PAGE - 62 * mm, 3.0)
 
-    # Mention personnalisee, centree
+    # ── Accroche : titre d'univers, en gros, avec prenom en orange si present ──
     prenom = (enfant_nom or "votre enfant").strip()
-    intro = "Une histoire imaginee pour "
-    size = 15
-    iw = c.stringWidth(intro, F_ITALIC, size)
-    pw = c.stringWidth(prenom, F_ITALIC, size)
-    total = iw + pw
-    mx = cx - total / 2
-    my = PAGE / 2
-    c.setFont(F_ITALIC, size)
+    accroche = (univers_titre or "Une histoire rien qu'\u00e0 lui").strip()
+    acc_size = 30
+    max_w = PAGE - 2 * (SAFE + 12 * mm)
+    acc_lines = wrap_text(c, accroche, F_TITLE, acc_size, max_w)
+    while len(acc_lines) > 2 and acc_size > 20:
+        acc_size -= 2
+        acc_lines = wrap_text(c, accroche, F_TITLE, acc_size, max_w)
     c.setFillColor(HexColor(C_BRUN))
-    c.drawString(mx, my, intro)
-    c.setFillColor(HexColor(C_ORANGE))
-    c.drawString(mx + iw, my, prenom)
+    c.setFont(F_TITLE, acc_size)
+    ay = PAGE - 78 * mm
+    line_h = acc_size * 1.16
+    for line in acc_lines:
+        lw = c.stringWidth(line, F_TITLE, acc_size)
+        c.drawString(cx - lw / 2, ay, line)
+        ay -= line_h
 
-    # CTA site
-    cta_intro = "Creez la votre sur"
-    c.setFont(F_BODY, 12)
-    ci_w = c.stringWidth(cta_intro, F_BODY, 12)
-    site_w = c.stringWidth(BRAND_SITE, F_BODY_B, 12)
-    cta_total = ci_w + 2 * mm + site_w
-    cta_x = cx - cta_total / 2
-    cta_y = 50 * mm
-    c.setFillColor(HexColor(C_GRIS))
-    c.setFont(F_BODY, 12)
-    c.drawString(cta_x, cta_y, cta_intro)
-    c.setFillColor(HexColor(C_ORANGE))
-    c.setFont(F_BODY_B, 12)
-    c.drawString(cta_x + ci_w + 2 * mm, cta_y, BRAND_SITE)
+    # ── Paragraphe de presentation : texte d'univers ──
+    if univers_texte:
+        c.setFillColor(HexColor("#7C7064"))
+        para_size = 13
+        para_w = PAGE - 2 * (SAFE + 14 * mm)
+        para_lines = wrap_text(c, univers_texte.strip(), F_BODY, para_size, para_w)
+        py = ay - 6 * mm
+        pl_h = para_size * 1.55
+        for line in para_lines:
+            lw = c.stringWidth(line, F_BODY, para_size)
+            c.drawString(cx - lw / 2, py, line)
+            py -= pl_h
+    else:
+        py = ay
 
-    # Mentions legales (au-dessus de la zone de securite basse)
+    # ── Mention personnalisee encadree de points orange ──
+    mention = "Une histoire cr\u00e9\u00e9e sp\u00e9cialement pour "
+    msize = 12
+    mi_w = c.stringWidth(mention, F_BODY_B, msize)
+    mp_w = c.stringWidth(prenom, F_BODY_B, msize)
+    dot_gap = 8 * mm
+    total_w = mi_w + mp_w
+    block_y = py - 16 * mm
+    start_x = cx - total_w / 2
+    # point gauche
+    c.setFillColor(HexColor(C_ORANGE))
+    c.circle(start_x - dot_gap, block_y + msize * 0.32, 1.6, fill=1, stroke=0)
+    # texte (intro brun doux + prenom orange)
+    c.setFillColor(HexColor("#8A7E70"))
+    c.setFont(F_BODY_B, msize)
+    c.drawString(start_x, block_y, mention)
+    c.setFillColor(HexColor(C_ORANGE))
+    c.drawString(start_x + mi_w, block_y, prenom)
+    # point droit
+    c.circle(start_x + total_w + dot_gap, block_y + msize * 0.32, 1.6, fill=1, stroke=0)
+
+    # ── Filet separateur au-dessus du pied ──
+    foot_top = SAFE + 26 * mm
+    c.setStrokeColor(HexColor("#EADFD0"))
+    c.setLineWidth(0.7)
+    c.line(SAFE + 6 * mm, foot_top, PAGE - SAFE - 6 * mm, foot_top)
+
+    # ── Pied : site (gras orange) a gauche, mentions en dessous ──
+    foot_x = SAFE + 6 * mm
+    c.setFillColor(HexColor(C_ORANGE))
+    c.setFont(F_BODY_B, 13)
+    c.drawString(foot_x, foot_top - 9 * mm, BRAND_SITE)
+
     c.setFillColor(HexColor(C_GRIS))
+    c.setFont(F_BODY, 9.5)
+    c.drawString(foot_x, foot_top - 15 * mm, "\u00c9dition personnalis\u00e9e \u00b7 Imprim\u00e9 en France \u00b7 2026")
     c.setFont(F_BODY, 9)
-    legal_lines = [
-        "Histoire et illustrations generees par intelligence artificielle.",
-        f"(c) 2026 Piklo - {BRAND_SITE}. Tous droits reserves.",
-    ]
-    ly = SAFE + 8 * mm
-    for line in reversed(legal_lines):
-        lw = c.stringWidth(line, F_BODY, 9)
-        c.drawString(cx - lw / 2, ly, line)
-        ly += 13
+    c.drawString(foot_x, foot_top - 20 * mm, "Histoire et illustrations g\u00e9n\u00e9r\u00e9es par intelligence artificielle.")
 
     c.showPage()
 
@@ -454,8 +483,15 @@ def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
             draw_text_page(c, page.get("legende", ""), bg_hex, fg_hex)
             draw_image_page(c, img_paths[page["id"]])
 
-        # 3) Quatrieme de couverture (page simple)
-        draw_back_cover(c, enfant_nom=enfant_nom)
+        # 3) Quatrieme de couverture (page simple) avec resume d'univers
+        reassurance = histoire.get("reassurance") or {}
+        univers = reassurance.get("univers") or {}
+        draw_back_cover(
+            c,
+            enfant_nom=enfant_nom,
+            univers_titre=univers.get("titre"),
+            univers_texte=univers.get("texte"),
+        )
 
         c.save()
 
