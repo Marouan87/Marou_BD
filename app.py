@@ -274,6 +274,7 @@ def _prepare_image(content, path):
 
 
 def _download_image(url, path):
+    print(f"Downloading: {url}", flush=True)
     r = requests.get(url, timeout=30)
     r.raise_for_status()
     _prepare_image(r.content, path)
