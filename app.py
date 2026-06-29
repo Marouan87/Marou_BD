@@ -120,16 +120,16 @@ PALETTE_DEFAUT = 0
 # ── Assets statiques page marketing ──────────────────────────────────────────
 UNIVERS_MARKETING = [
     {
-        "titre": "Alma arrete la tetine",
-        "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/7d72a7c5-3ac9-410f-9ea7-0897f7112cc7/6153f3e8-42c0-4cfe-b0d0-41bd4bae8cbc.png",
+        "titre": "",
+        "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/Lana_Cov.png",
     },
     {
-        "titre": "Nael au Maroc",
-        "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/b0e55298-7aec-47c2-a4e1-c2d66cbe4430/4f00da94-2683-4357-80fd-8be9e5740c6f.png",
+        "titre": "",
+        "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/Nael_Cov.png",
     },
     {
-        "titre": "Le petit frere arrive",
-        "url": None,  # TODO : remplacer par l'URL Supabase quand disponible
+        "titre": "",
+        "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/Noah_Couv.png",
     },
 ]
 
@@ -546,15 +546,16 @@ def draw_marketing(c, tmp_dir):
             _draw_placeholder(c, x, y_img, vignette_w, vignette_h)
 
         c.setFillColor(HexColor(C_CREME))
-        tit = univers["titre"]
-        font_size = 8
-        c.setFont(F_BODY, font_size)
-        tw = c.stringWidth(tit, F_BODY, font_size)
-        if tw > vignette_w:
-            font_size = 7
+        if univers["titre"]:
+            tit = univers["titre"]
+            font_size = 8
             c.setFont(F_BODY, font_size)
             tw = c.stringWidth(tit, F_BODY, font_size)
-        c.drawString(x + vignette_w / 2 - tw / 2, y_img - 6*mm, tit)
+            if tw > vignette_w:
+                font_size = 7
+                c.setFont(F_BODY, font_size)
+                tw = c.stringWidth(tit, F_BODY, font_size)
+            c.drawString(x + vignette_w / 2 - tw / 2, y_img - 6*mm, tit)
 
     qr = qrcode.make(f"https://{BRAND_SITE}")
     qr_path = os.path.join(tmp_dir, "qr.png")
