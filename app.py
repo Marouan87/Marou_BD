@@ -114,7 +114,7 @@ def fetch_histoire(histoire_id):
     r = requests.get(
         f"{SUPABASE_URL}/rest/v1/histoires",
         headers=HEADERS,
-        params={"id": f"eq.{histoire_id}", "select": "id,titre,theme,contenu,reassurance"},
+        params={"id": f"eq.{histoire_id}", "select": "id,titre,theme,contenu,reassurance,personnage_principal"},
     )
     r.raise_for_status()
     data = r.json()
@@ -137,62 +137,33 @@ def fetch_pages(histoire_id):
     return r.json()
 
 
-def fetch_heros_nom(histoire_id):
+def _prenom_affiche(valeur):
     """
-    Recupere le prenom du heros (role = 'enfant') de CETTE histoire.
+    Met en forme le prenom lu dans histoires.personnage_principal.
 
-    On ne peut pas prendre le premier 'enfant' de toute la table : depuis
-    qu'il y a plusieurs heros en base (Nael, Lana...), ca renvoie le mauvais
-    prenom. On remonte donc le bon personnage via la table de liaison
-    personnages_page, scopee sur les pages de l'histoire en cours :
-      pages(histoire_id) -> personnages_page(page_id) -> personnages(role=enfant)
+    Le champ contient directement le prenom en texte, mais la casse est
+    heterogene en base ('Nael', 'nael', 'Jean-Noel'...). On met une majuscule
+    en tete de chaque mot (espaces et tirets), sans rien mettre en minuscule,
+    pour ne pas casser un nom deja correct comme 'Jean-Noel' ni perdre d'accent.
 
-    Retourne None si rien trouve, pour retomber proprement sur la mention
-    generique sans planter.
+    Retourne None si vide, pour retomber sur la mention generique.
     """
-    try:
-        # 1) pages de cette histoire
-        rp = requests.get(
-            f"{SUPABASE_URL}/rest/v1/pages",
-            headers=HEADERS,
-            params={"histoire_id": f"eq.{histoire_id}", "select": "id"},
-        )
-        rp.raise_for_status()
-        page_ids = [p["id"] for p in rp.json() if p.get("id")]
-        if not page_ids:
-            return None
-
-        # 2) personnages lies a ces pages
-        liste_pages = ",".join(page_ids)
-        rl = requests.get(
-            f"{SUPABASE_URL}/rest/v1/personnages_page",
-            headers=HEADERS,
-            params={"page_id": f"in.({liste_pages})", "select": "personnage_id"},
-        )
-        rl.raise_for_status()
-        perso_ids = list({row["personnage_id"] for row in rl.json() if row.get("personnage_id")})
-        if not perso_ids:
-            return None
-
-        # 3) parmi eux, l'enfant heros
-        liste_perso = ",".join(perso_ids)
-        rh = requests.get(
-            f"{SUPABASE_URL}/rest/v1/personnages",
-            headers=HEADERS,
-            params={
-                "id": f"in.({liste_perso})",
-                "role": "eq.enfant",
-                "select": "nom",
-                "limit": "1",
-            },
-        )
-        rh.raise_for_status()
-        data = rh.json()
-        if data and data[0].get("nom"):
-            return data[0]["nom"].capitalize()
-    except Exception:
-        pass
-    return None
+    if not valeur:
+        return None
+    valeur = valeur.strip()
+    if not valeur:
+        return None
+    out = []
+    debut_mot = True
+    for ch in valeur:
+        if debut_mot and ch.isalpha():
+            out.append(ch.upper())
+            debut_mot = False
+        else:
+            out.append(ch)
+        if ch in (" ", "-"):
+            debut_mot = True
+    return "".join(out)
 
 
 def upload_pdf(pdf_bytes: bytes, histoire_id: str, palette_id: int) -> str:
@@ -533,7 +504,7 @@ def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
         c = canvas.Canvas(pdf_path, pagesize=(PAGE, PAGE))
 
         # 1) Couverture avant (page simple) : illustration de la 1re scene
-        enfant_nom = fetch_heros_nom(histoire_id)
+        enfant_nom = _prenom_affiche(histoire.get("personnage_principal"))
         draw_front_cover(c, titre, img_paths[pages_ok[0]["id"]])
 
         # 2) Pour chaque scene : page texte puis page illustration
