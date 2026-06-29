@@ -424,6 +424,7 @@ def draw_back_cover(c, enfant_nom=None, univers_titre=None, univers_texte=None):
     if univers_texte:
         c.setFillColor(HexColor("#7C7064"))
         para_size = 13
+        c.setFont(F_BODY, para_size)
         para_w = PAGE - 2 * (SAFE + 14 * mm)
         para_lines = wrap_text(c, univers_texte.strip(), F_BODY, para_size, para_w)
         py = ay - 6 * mm
