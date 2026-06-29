@@ -12,7 +12,7 @@ Format Gelato hardcover carre 20x20 cm, 30 pages interieures :
      - Pages 4-27   : histoire 12 scenes (texte + illustration)
      - Page 28      : page reassurance
      - Page 29      : page marketing (3 univers + QR code)
-     - Page 30      : 4eme de couverture interieure
+     - Page 30      : pourquoi cette histoire pour [prenom]
      - Page 31      : endpaper blanc (non imprimable)
   2. PDF couverture : wraparound 458x246 mm
 """
@@ -120,15 +120,15 @@ PALETTE_DEFAUT = 0
 # ── Assets statiques page marketing ──────────────────────────────────────────
 UNIVERS_MARKETING = [
     {
-        "titre": "",
+        "titre": "Lana offre sa tetine a la fee",
         "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/Lana_Cov.png",
     },
     {
-        "titre": "",
+        "titre": "Nael arrive au Maroc",
         "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/Nael_Cov.png",
     },
     {
-        "titre": "",
+        "titre": "Noah a une petite soeur !",
         "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/Noah_Couv.png",
     },
 ]
@@ -448,12 +448,10 @@ def _make_book_cover(img_content, out_w=300, out_h=380):
     src = PILImage.open(io.BytesIO(img_content)).convert("RGBA")
     canvas_img = PILImage.new("RGBA", (out_w + pad, out_h + pad), (0, 0, 0, 0))
 
-    # Ombre portee
     shadow = PILImage.new("RGBA", (out_w - SPINE_W + 4, out_h - 8), (0, 0, 0, 70))
     shadow = shadow.filter(PILFilter.GaussianBlur(6))
     canvas_img.paste(shadow, (SPINE_W + 6, 10), shadow)
 
-    # Tranche avec degrade
     spine = PILImage.new("RGBA", (SPINE_W, out_h - 8), (*SPINE_COLOR, 255))
     draw_spine = PILDraw.Draw(spine)
     for x in range(SPINE_W):
@@ -462,12 +460,10 @@ def _make_book_cover(img_content, out_w=300, out_h=380):
         draw_spine.line([(x, 0), (x, out_h - 8)], fill=(*col, 255))
     canvas_img.paste(spine, (0, 4), spine)
 
-    # Page principale
     page_w = out_w - SPINE_W
     page_h = out_h - 8
     page_img = src.resize((page_w, page_h), PILImage.LANCZOS)
 
-    # Vignettage bords
     vignette = PILImage.new("RGBA", (page_w, page_h), (0, 0, 0, 0))
     vdraw = PILDraw.Draw(vignette)
     for i in range(10):
@@ -477,7 +473,6 @@ def _make_book_cover(img_content, out_w=300, out_h=380):
     page_combined = PILImage.alpha_composite(page_img, vignette)
     canvas_img.paste(page_combined, (SPINE_W, 4), page_combined)
 
-    # Reflet haut
     reflet_h = int(page_h * 0.12)
     reflet = PILImage.new("RGBA", (page_w, reflet_h), (0, 0, 0, 0))
     rdraw = PILDraw.Draw(reflet)
@@ -505,7 +500,8 @@ def draw_marketing(c, tmp_dir):
     gap = 6 * mm
     total_w = 3 * vignette_w + 2 * gap
     start_x = cx - total_w / 2
-    y_img = PAGE / 2 - 8*mm
+    # Ancre haute des vignettes : on part du bas du titre et on descend
+    y_top = PAGE - 50*mm
 
     for i, univers in enumerate(UNIVERS_MARKETING):
         x = start_x + i * (vignette_w + gap)
@@ -514,20 +510,31 @@ def draw_marketing(c, tmp_dir):
                 r = requests.get(univers["url"], timeout=20)
                 r.raise_for_status()
                 book_img = _make_book_cover(r.content, out_w=300, out_h=380)
+                # Fond sombre pour eviter les problemes de transparence
                 bg = PILImage.new("RGB", book_img.size, (56, 48, 42))
                 bg.paste(book_img, mask=book_img.split()[3])
                 book_path = os.path.join(tmp_dir, f"mktg_{i}.jpg")
                 bg.save(book_path, format="JPEG", quality=92)
-                # Dimensions exactes, sans etirement
+                # Ratio exact de l'image generee, ancree par le haut
+                img_w_px, img_h_px = book_img.size
                 draw_w = vignette_w
-                draw_h = draw_w * (book_img.size[1] / book_img.size[0])
+                draw_h = draw_w * (img_h_px / img_w_px)
+                y_img = y_top - draw_h
                 c.drawImage(book_path,
-                            x + (vignette_w - draw_w) / 2, y_img,
-                            width=draw_w, height=draw_h)
+                            x + (vignette_w - draw_w) / 2,
+                            y_img,
+                            width=draw_w,
+                            height=draw_h,
+                            preserveAspectRatio=False,
+                            mask='auto')
             except Exception:
-                _draw_placeholder(c, x, y_img, vignette_w, 60*mm)
+                draw_h = vignette_w * 1.25
+                y_img = y_top - draw_h
+                _draw_placeholder(c, x, y_img, vignette_w, draw_h)
         else:
-            _draw_placeholder(c, x, y_img, vignette_w, 60*mm)
+            draw_h = vignette_w * 1.25
+            y_img = y_top - draw_h
+            _draw_placeholder(c, x, y_img, vignette_w, draw_h)
 
         c.setFillColor(HexColor(C_CREME))
         if univers["titre"]:
@@ -539,7 +546,7 @@ def draw_marketing(c, tmp_dir):
                 font_size = 7
                 c.setFont(F_BODY, font_size)
                 tw = c.stringWidth(tit, F_BODY, font_size)
-            c.drawString(x + vignette_w / 2 - tw / 2, y_img - 6*mm, tit)
+            c.drawString(x + vignette_w / 2 - tw / 2, y_img - 5*mm, tit)
 
     qr = qrcode.make(f"https://{BRAND_SITE}")
     qr_path = os.path.join(tmp_dir, "qr.png")
@@ -555,58 +562,84 @@ def draw_marketing(c, tmp_dir):
     c.showPage()
 
 
-def draw_quatrieme_interieure(c, prenom=None, univers_titre=None, univers_texte=None):
+def draw_pourquoi_cette_histoire(c, prenom=None, univers_titre=None, univers_texte=None):
+    """Page 30 : pourquoi cette histoire est parfaite pour [prenom].
+    Angle benefice parent, distinct de la page reassurance."""
     cx = PAGE / 2
     c.setFillColor(HexColor(C_CREME))
     c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
 
-    box = 11 * mm
-    label_size = 22
-    label_w = c.stringWidth(BRAND_NAME, F_TITLE, label_size)
-    gap = 3.5 * mm
-    group_w = box + gap + label_w
-    draw_piklo_mark(c, cx - group_w / 2, PAGE - 30*mm,
-                    box=box, gap=gap, label_color=C_ORANGE, label_size=label_size)
+    # Surtitre
+    prenom_txt = prenom or "votre enfant"
+    surtitre = f"POURQUOI CETTE HISTOIRE POUR {prenom_txt.upper()} ?"
+    draw_tracked(c, surtitre, F_BODY_B, 8, C_SURTITRE, cx, PAGE - 30*mm, 2.0)
 
-    draw_tracked(c, "L'HISTOIRE", F_BODY_B, 9, C_SURTITRE, cx, PAGE - 52*mm, 3.0)
-
-    accroche = (univers_titre or "Une histoire rien qu'a lui").strip()
-    acc_size = 24
+    # Accroche
+    accroche = (univers_titre or "Une histoire con\u00e7ue pour lui").strip()
+    acc_size = 26
     max_w = PAGE - 2 * (SAFE + 10*mm)
     acc_lines = wrap_text(c, accroche, F_TITLE, acc_size, max_w)
-    while len(acc_lines) > 2 and acc_size > 16:
+    while len(acc_lines) > 2 and acc_size > 18:
         acc_size -= 2
         acc_lines = wrap_text(c, accroche, F_TITLE, acc_size, max_w)
     c.setFillColor(HexColor(C_BRUN))
     c.setFont(F_TITLE, acc_size)
-    ay = PAGE - 66*mm
+    ay = PAGE - 46*mm
     for line in acc_lines:
         lw = c.stringWidth(line, F_TITLE, acc_size)
         c.drawString(cx - lw / 2, ay, line)
         ay -= acc_size * 1.16
 
-    if univers_texte:
-        c.setFillColor(HexColor("#7C7064"))
-        para_size = 12
-        c.setFont(F_BODY, para_size)
-        para_w = PAGE - 2 * (SAFE + 12*mm)
-        para_lines = wrap_text(c, univers_texte.strip(), F_BODY, para_size, para_w)
-        py = ay - 5*mm
-        for line in para_lines:
-            lw = c.stringWidth(line, F_BODY, para_size)
-            c.drawString(cx - lw / 2, py, line)
-            py -= para_size * 1.55
-    else:
-        py = ay
+    # Trait orange
+    bar_w = 12 * mm
+    c.setFillColor(HexColor(C_ORANGE))
+    c.roundRect(cx - bar_w / 2, ay - 4*mm, bar_w, 1.2*mm, 0.6*mm, fill=1, stroke=0)
+    ay -= 10*mm
 
+    # Paragraphe benefice
+    if univers_texte:
+        texte_benefice = univers_texte.strip()
+    else:
+        texte_benefice = (
+            f"Cette histoire a ete con\u00e7ue pour accompagner {prenom_txt} "
+            "dans une \u00e9tape importante, avec douceur et bienveillance. "
+            "Chaque page a \u00e9t\u00e9 pens\u00e9e pour qu'il s'y reconnaisse "
+            "et se sente compris."
+        )
+
+    c.setFillColor(HexColor("#7C7064"))
+    c.setFont(F_BODY, 13)
+    para_w = PAGE - 2 * (SAFE + 12*mm)
+    para_lines = wrap_text(c, texte_benefice, F_BODY, 13, para_w)
+    py = ay - 2*mm
+    for line in para_lines:
+        lw = c.stringWidth(line, F_BODY, 13)
+        c.drawString(cx - lw / 2, py, line)
+        py -= 13 * 1.6
+
+    # Bloc "3 bonnes raisons"
+    raisons = [
+        "\u2022  Une histoire \u00e0 son pr\u00e9nom, dans son univers",
+        "\u2022  Des illustrations cr\u00e9\u00e9es rien que pour lui",
+        "\u2022  Un souvenir unique \u00e0 garder toute la vie",
+    ]
+    py -= 6*mm
+    c.setFillColor(HexColor(C_BRUN))
+    c.setFont(F_BODY_B, 12)
+    for raison in raisons:
+        lw = c.stringWidth(raison, F_BODY_B, 12)
+        c.drawString(cx - lw / 2, py, raison)
+        py -= 12 * 1.7
+
+    # Mention personnalisee
     if prenom:
-        mention = "Une histoire creee specialement pour "
-        msize = 11
+        mention = "Cr\u00e9\u00e9 sp\u00e9cialement pour "
+        msize = 12
         mi_w = c.stringWidth(mention, F_BODY_B, msize)
         mp_w = c.stringWidth(prenom, F_BODY_B, msize)
         dot_gap = 7 * mm
         total_w = mi_w + mp_w
-        block_y = py - 14*mm
+        block_y = py - 10*mm
         start_x = cx - total_w / 2
         c.setFillColor(HexColor(C_ORANGE))
         c.circle(start_x - dot_gap, block_y + msize * 0.32, 1.4, fill=1, stroke=0)
@@ -617,6 +650,7 @@ def draw_quatrieme_interieure(c, prenom=None, univers_titre=None, univers_texte=
         c.drawString(start_x + mi_w, block_y, prenom)
         c.circle(start_x + total_w + dot_gap, block_y + msize * 0.32, 1.4, fill=1, stroke=0)
 
+    # Footer
     foot_top = SAFE + 24*mm
     c.setStrokeColor(HexColor("#EADFD0"))
     c.setLineWidth(0.7)
@@ -628,11 +662,12 @@ def draw_quatrieme_interieure(c, prenom=None, univers_titre=None, univers_texte=
     c.setFillColor(HexColor(C_GRIS))
     c.setFont(F_BODY, 8.5)
     c.drawString(foot_x, foot_top - 14*mm,
-                 "Edition personnalisee - Imprime en France - 2026")
+                 "\u00c9dition personnalis\u00e9e \u00b7 Imprim\u00e9 en France \u00b7 2026")
     c.setFont(F_BODY, 8)
     c.drawString(foot_x, foot_top - 19*mm,
-                 "Histoire et illustrations generees par intelligence artificielle.")
+                 "Histoire et illustrations g\u00e9n\u00e9r\u00e9es par intelligence artificielle.")
     c.showPage()
+
 
 # ── Wraparound couverture ─────────────────────────────────────────────────────
 
@@ -732,10 +767,10 @@ def draw_wraparound(c, titre, img_path_front, histoire=None, prenom=None):
     reassurance = (histoire.get("reassurance") or {}) if histoire else {}
     univers = reassurance.get("univers") or {}
     accroche = (univers.get("titre") or "Une histoire rien qu'\u00e0 lui").strip()
-    acc_size = 24
+    acc_size = 28
     max_w_b = bw - 2 * (SAFE + 6*mm)
     acc_lines = wrap_text(c, accroche, F_TITLE, acc_size, max_w_b)
-    while len(acc_lines) > 2 and acc_size > 16:
+    while len(acc_lines) > 2 and acc_size > 18:
         acc_size -= 2
         acc_lines = wrap_text(c, accroche, F_TITLE, acc_size, max_w_b)
     c.setFillColor(HexColor(C_BRUN))
@@ -750,20 +785,20 @@ def draw_wraparound(c, titre, img_path_front, histoire=None, prenom=None):
     univers_texte = univers.get("texte")
     if univers_texte:
         c.setFillColor(HexColor("#7C7064"))
-        c.setFont(F_BODY, 11)
-        para_lines = wrap_text(c, univers_texte.strip(), F_BODY, 11, max_w_b)
+        c.setFont(F_BODY, 13)
+        para_lines = wrap_text(c, univers_texte.strip(), F_BODY, 13, max_w_b)
         py = ay - 5*mm
         for line in para_lines:
-            lw = c.stringWidth(line, F_BODY, 11)
+            lw = c.stringWidth(line, F_BODY, 13)
             c.drawString(bcx - lw / 2, py, line)
-            py -= 11 * 1.55
+            py -= 13 * 1.55
     else:
         py = ay
 
     # Mention personnalisee
     if prenom:
         mention = "Une histoire cr\u00e9\u00e9e sp\u00e9cialement pour "
-        msize = 11
+        msize = 12
         mi_w = c.stringWidth(mention, F_BODY_B, msize)
         mp_w = c.stringWidth(prenom, F_BODY_B, msize)
         dot_gap = 7 * mm
@@ -860,7 +895,7 @@ def assembler_pdf_gelato(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
             draw_image_page(c, img_paths[page["id"]])
         draw_reassurance(c, reassurance, titre, prenom)          # p.28
         draw_marketing(c, tmp)                                   # p.29
-        draw_quatrieme_interieure(                               # p.30
+        draw_pourquoi_cette_histoire(                            # p.30
             c,
             prenom=prenom,
             univers_titre=univers.get("titre"),
