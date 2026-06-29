@@ -878,7 +878,7 @@ def assembler_pdf_gelato(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
             path = os.path.join(tmp, f"{pid}.jpg")
             real_url = (
                 f"{SUPABASE_URL}/storage/v1/object/public/"
-                f"images/{histoire_id}/{pid}.png"
+                f"images/{histoire_id}/{pid}"
             )
             _download_image(real_url, path)
             img_paths[pid] = path
