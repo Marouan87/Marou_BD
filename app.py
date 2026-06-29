@@ -120,16 +120,16 @@ PALETTE_DEFAUT = 0
 # ── Assets statiques page marketing ──────────────────────────────────────────
 UNIVERS_MARKETING = [
     {
-        "titre": "Alma arrete la tetine",
+        "titre": "Alma arrête la tetine",
         "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/7d72a7c5-3ac9-410f-9ea7-0897f7112cc7/6153f3e8-42c0-4cfe-b0d0-41bd4bae8cbc.png",
     },
     {
-        "titre": "Nael au Maroc",
+        "titre": "Nael découvre le Maroc",
         "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/b0e55298-7aec-47c2-a4e1-c2d66cbe4430/4f00da94-2683-4357-80fd-8be9e5740c6f.png",
     },
     {
-        "titre": "Le petit frere arrive",
-        "url": None,  # TODO : remplacer par l'URL Supabase quand disponible
+        "titre": "Noah a une petite soeur !",
+        "url": "https://nrqvexaulphzjtjkczje.supabase.co/storage/v1/object/public/images/5dcc76fd-57e6-4c0a-a11e-1d6957abba09/e88e6e4a-103d-47e9-951f-4ef2234c997c.png",
     },
 ]
 
