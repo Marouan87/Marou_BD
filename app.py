@@ -88,8 +88,10 @@ TEXT_MARGIN_X = 22 * mm  # marge horizontale du bloc texte (> SAFE)
 # Nombre de scenes attendu pour rester dans le forfait 24 pages.
 NB_SCENES = 10
 
-FONT_NAME = "DejaVu-Bold"
-FONT_SIZE = 24
+# Bloc de texte des pages legende : corps Nunito, comme la visionneuse.
+# Volontairement plus petit et non gras que l'ancienne version (DejaVu-Bold 24).
+TEXT_FONT = F_BODY
+TEXT_SIZE = 19
 
 # Palette (fond, couleur du texte) - identique a la visionneuse
 PALETTE = [
@@ -135,15 +137,57 @@ def fetch_pages(histoire_id):
     return r.json()
 
 
-def fetch_heros_nom():
+def fetch_heros_nom(histoire_id):
+    """
+    Recupere le prenom du heros (role = 'enfant') de CETTE histoire.
+
+    On ne peut pas prendre le premier 'enfant' de toute la table : depuis
+    qu'il y a plusieurs heros en base (Nael, Lana...), ca renvoie le mauvais
+    prenom. On remonte donc le bon personnage via la table de liaison
+    personnages_page, scopee sur les pages de l'histoire en cours :
+      pages(histoire_id) -> personnages_page(page_id) -> personnages(role=enfant)
+
+    Retourne None si rien trouve, pour retomber proprement sur la mention
+    generique sans planter.
+    """
     try:
-        r = requests.get(
+        # 1) pages de cette histoire
+        rp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/pages",
+            headers=HEADERS,
+            params={"histoire_id": f"eq.{histoire_id}", "select": "id"},
+        )
+        rp.raise_for_status()
+        page_ids = [p["id"] for p in rp.json() if p.get("id")]
+        if not page_ids:
+            return None
+
+        # 2) personnages lies a ces pages
+        liste_pages = ",".join(page_ids)
+        rl = requests.get(
+            f"{SUPABASE_URL}/rest/v1/personnages_page",
+            headers=HEADERS,
+            params={"page_id": f"in.({liste_pages})", "select": "personnage_id"},
+        )
+        rl.raise_for_status()
+        perso_ids = list({row["personnage_id"] for row in rl.json() if row.get("personnage_id")})
+        if not perso_ids:
+            return None
+
+        # 3) parmi eux, l'enfant heros
+        liste_perso = ",".join(perso_ids)
+        rh = requests.get(
             f"{SUPABASE_URL}/rest/v1/personnages",
             headers=HEADERS,
-            params={"role": "eq.enfant", "select": "nom", "limit": "1"},
+            params={
+                "id": f"in.({liste_perso})",
+                "role": "eq.enfant",
+                "select": "nom",
+                "limit": "1",
+            },
         )
-        r.raise_for_status()
-        data = r.json()
+        rh.raise_for_status()
+        data = rh.json()
         if data and data[0].get("nom"):
             return data[0]["nom"].capitalize()
     except Exception:
@@ -198,22 +242,35 @@ def wrap_text(c, text, font, size, max_width):
 
 
 def draw_text_page(c, legende, bg_hex, fg_hex):
-    """Page simple carree : fond uni + legende centree, dans la zone de securite."""
+    """Page simple carree : fond uni + legende centree.
+    Corps Nunito (comme la visionneuse), bloc centre horizontalement
+    (chaque ligne) et verticalement (l'ensemble du bloc sur le milieu)."""
     c.setFillColor(HexColor(bg_hex))
     c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
 
     c.setFillColor(HexColor(fg_hex))
-    c.setFont(FONT_NAME, FONT_SIZE)
+    c.setFont(TEXT_FONT, TEXT_SIZE)
+
     available_w = PAGE - 2 * TEXT_MARGIN_X
-    lines = wrap_text(c, legende, FONT_NAME, FONT_SIZE, available_w)
-    line_height = FONT_SIZE * 1.5
-    total_h = len(lines) * line_height
-    y_start = (PAGE + total_h) / 2 - line_height * 0.8
+    lines = wrap_text(c, legende or "", TEXT_FONT, TEXT_SIZE, available_w)
+    if not lines:
+        c.showPage()
+        return
+
+    line_height = TEXT_SIZE * 1.6
+    cap = TEXT_SIZE * 0.70  # hauteur de capitale approchee
+
+    # Hauteur visuelle du bloc, du haut de la 1re ligne a la base de la derniere.
+    visual_h = (len(lines) - 1) * line_height + cap
+    # Base de la premiere ligne pour centrer ce bloc sur le milieu de la page.
+    first_baseline = PAGE / 2 + visual_h / 2 - cap
+
     for i, line in enumerate(lines):
-        y = y_start - i * line_height
-        text_w = c.stringWidth(line, FONT_NAME, FONT_SIZE)
+        y = first_baseline - i * line_height
+        text_w = c.stringWidth(line, TEXT_FONT, TEXT_SIZE)
         x = (PAGE - text_w) / 2
         c.drawString(x, y, line)
+
     c.showPage()
 
 
@@ -475,7 +532,7 @@ def assembler_pdf(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
         c = canvas.Canvas(pdf_path, pagesize=(PAGE, PAGE))
 
         # 1) Couverture avant (page simple) : illustration de la 1re scene
-        enfant_nom = fetch_heros_nom()
+        enfant_nom = fetch_heros_nom(histoire_id)
         draw_front_cover(c, titre, img_paths[pages_ok[0]["id"]])
 
         # 2) Pour chaque scene : page texte puis page illustration
