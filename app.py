@@ -980,33 +980,25 @@ def draw_souvenir(c, prenom=None):
     y -= 9*mm
     _ligne(fx, y, fw)
 
-    # Bloc petit mot : encadre creme arrondi
-    y -= 11*mm
-    box_h = 30*mm
+    # Bloc petit mot : encadre creme arrondi, 4 lignes
+    y -= 12*mm
     box_top = y
-    box_bot = y - box_h
+    box_bot = SAFE + 12*mm
+    box_h = box_top - box_bot
     c.setFillColor(HexColor("#F6ECDD"))
     c.roundRect(fx, box_bot, fw, box_h, 4*mm, fill=1, stroke=0)
     c.setFillColor(HexColor(C_ORANGE))
     c.setFont(F_BODY_B, label_size)
-    c.drawString(fx + 6*mm, box_top - 9*mm, "Un petit mot \u00e0 garder toute la vie")
-    ly = box_top - 17*mm
-    for _ in range(2):
+    c.drawString(fx + 6*mm, box_top - 11*mm, "Un petit mot \u00e0 garder toute la vie")
+    # 4 lignes reparties dans la hauteur restante du bloc
+    first_line = box_top - 22*mm
+    last_line = box_bot + 10*mm
+    n_lines = 4
+    step = (first_line - last_line) / (n_lines - 1)
+    ly = first_line
+    for _ in range(n_lines):
         _ligne(fx + 6*mm, ly, fw - 12*mm)
-        ly -= 8*mm
-
-    # Encadre dessin : occupe l'espace restant jusqu'a la marge basse
-    draw_top = box_bot - 8*mm
-    draw_box_bot = SAFE + 10*mm
-    draw_h = draw_top - draw_box_bot
-    c.setStrokeColor(HexColor("#E0D2C0"))
-    c.setLineWidth(0.8)
-    c.setDash(2, 3)
-    c.roundRect(fx, draw_box_bot, fw, draw_h, 3*mm, fill=0, stroke=1)
-    c.setDash()
-    c.setFillColor(HexColor("#B8A894"))
-    c.setFont(F_ITALIC, 11)
-    c.drawString(fx + 5*mm, draw_top - 7*mm, f"Le dessin de {prenom_txt}")
+        ly -= step
 
     c.showPage()
 
