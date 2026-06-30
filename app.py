@@ -82,7 +82,9 @@ HEADERS = {
 
 # ── Dimensions ───────────────────────────────────────────────────────────────
 PAGE_MM       = 200
-PAGE          = PAGE_MM * mm
+PAGE          = PAGE_MM * mm          # zone de contenu sure (composition pensee ici)
+BLEED         = 3 * mm                # fond perdu requis par Gelato (3 mm par cote)
+PAGE_FULL     = PAGE + 2 * BLEED      # taille physique reelle de la page = 206 mm
 SAFE          = 10 * mm
 TEXT_MARGIN_X = 20 * mm
 
@@ -299,18 +301,32 @@ def _draw_placeholder(c, x, y, w, h, color=C_ORANGE):
     c.setFillColor(HexColor(color))
     c.rect(x, y, w, h, fill=1, stroke=0)
 
+
+def _start_interior(c):
+    """A appeler en debut de chaque page interieure : recentre la composition
+    (pensee en 200 mm) dans la page physique de 206 mm en la decalant du bleed.
+    showPage() reinitialise la matrice, donc le translate ne fuit pas."""
+    c.translate(BLEED, BLEED)
+
+
+def _bg(c, color):
+    """Fond pleine page qui deborde dans le fond perdu (couvre tout le 206 mm).
+    A appeler apres _start_interior."""
+    c.setFillColor(HexColor(color))
+    c.rect(-BLEED, -BLEED, PAGE + 2 * BLEED, PAGE + 2 * BLEED, fill=1, stroke=0)
+
 # ── Pages interieures ─────────────────────────────────────────────────────────
 
 def draw_endpaper(c):
-    c.setFillColor(HexColor(C_CREME))
-    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
+    _start_interior(c)
+    _bg(c, C_CREME)
     c.showPage()
 
 
 def draw_faux_titre(c, titre):
+    _start_interior(c)
     cx = PAGE / 2
-    c.setFillColor(HexColor(C_CREME))
-    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
+    _bg(c, C_CREME)
 
     bar_w = 14 * mm
     c.setFillColor(HexColor(C_ORANGE))
@@ -349,9 +365,9 @@ def draw_faux_titre(c, titre):
 
 
 def draw_dedicace(c, dedicace_texte, prenom=None):
+    _start_interior(c)
     cx = PAGE / 2
-    c.setFillColor(HexColor(C_CREME))
-    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
+    _bg(c, C_CREME)
 
     texte = dedicace_texte.strip() if dedicace_texte else DEDICACE_DEFAUT
 
@@ -384,8 +400,8 @@ def draw_dedicace(c, dedicace_texte, prenom=None):
 
 
 def draw_text_page(c, legende, bg_hex, fg_hex):
-    c.setFillColor(HexColor(bg_hex))
-    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
+    _start_interior(c)
+    _bg(c, bg_hex)
     c.setFillColor(HexColor(fg_hex))
     c.setFont(TEXT_FONT, TEXT_SIZE)
     available_w = PAGE - 2 * TEXT_MARGIN_X
@@ -406,18 +422,21 @@ def draw_text_page(c, legende, bg_hex, fg_hex):
 
 
 def draw_image_page(c, img_path):
-    c.setFillColor(HexColor("#F5F5F5"))
-    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
-    c.drawImage(img_path, 0, 0, width=PAGE, height=PAGE, preserveAspectRatio=False)
+    _start_interior(c)
+    _bg(c, "#F5F5F5")
+    # L'illustration deborde jusqu'au bord physique (206 mm) pour le fond perdu
+    c.drawImage(img_path, -BLEED, -BLEED,
+                width=PAGE + 2 * BLEED, height=PAGE + 2 * BLEED,
+                preserveAspectRatio=False)
     c.showPage()
 
 
 def draw_pourquoi_sur_mesure(c, reassurance, prenom):
     """Page 28 : 'Sur mesure / Pourquoi c'est parfait pour [prenom] ?'
     Liste les raisons de reassurance.pourquoi, chacune avec une coche."""
+    _start_interior(c)
     cx = PAGE / 2
-    c.setFillColor(HexColor(C_CREME))
-    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
+    _bg(c, C_CREME)
 
     # Surtitre
     draw_tracked(c, "SUR MESURE", F_BODY_B, 9, C_SURTITRE, cx, PAGE - 32*mm, 3.0)
@@ -577,9 +596,9 @@ def _vignette_arrondie(img_content, target_px=600, radius_ratio=0.07,
 
 
 def draw_marketing(c, tmp_dir):
+    _start_interior(c)
     cx = PAGE / 2
-    c.setFillColor(HexColor(C_BRUN))
-    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
+    _bg(c, C_BRUN)
 
     # ── En-tete ────────────────────────────────────────────────────────────
     draw_tracked(c, "DECOUVREZ NOS HISTOIRES", F_BODY_B, 8, C_SURTITRE,
@@ -694,9 +713,9 @@ def draw_marketing(c, tmp_dir):
 
 def draw_benefices(c, reassurance, prenom):
     """Page 30 : 'Ce que cette histoire apporte' - 3 benefices (titre + texte)."""
+    _start_interior(c)
     cx = PAGE / 2
-    c.setFillColor(HexColor(C_CREME))
-    c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
+    _bg(c, C_CREME)
 
     # Surtitre
     draw_tracked(c, "LES BIENFAITS DE CETTE HISTOIRE", F_BODY_B, 8, C_SURTITRE,
@@ -989,7 +1008,7 @@ def assembler_pdf_gelato(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
 
         # PDF interieur
         interior_path = os.path.join(tmp, "interior.pdf")
-        c = canvas.Canvas(interior_path, pagesize=(PAGE, PAGE))
+        c = canvas.Canvas(interior_path, pagesize=(PAGE_FULL, PAGE_FULL))
 
         draw_endpaper(c)                                         # p.1
         draw_endpaper(c)                                         # p.2
