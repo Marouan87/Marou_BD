@@ -315,6 +315,56 @@ def _bg(c, color):
     c.setFillColor(HexColor(color))
     c.rect(-BLEED, -BLEED, PAGE + 2 * BLEED, PAGE + 2 * BLEED, fill=1, stroke=0)
 
+
+def draw_titre_editorial(c, surtitre, titre, y_surtitre, titre_size=24,
+                         titre_color=C_BRUN):
+    """En-tete commun aux pages editoriales : surtitre dore encadre de deux
+    petits traits, titre Quicksand centre, petit trait orange dessous.
+    Retourne le y de la base du titre (sous le trait orange)."""
+    cx = PAGE / 2
+
+    # Surtitre en interlettrage dore
+    c.setFont(F_BODY_B, 9)
+    tracking = 3.0
+    widths = [c.stringWidth(ch, F_BODY_B, 9) for ch in surtitre]
+    total = sum(widths) + tracking * (len(surtitre) - 1)
+    # Traits lateraux
+    trait_len = 8 * mm
+    trait_gap = 5 * mm
+    c.setStrokeColor(HexColor(C_SURTITRE))
+    c.setLineWidth(0.8)
+    c.line(cx - total / 2 - trait_gap - trait_len, y_surtitre + 2,
+           cx - total / 2 - trait_gap, y_surtitre + 2)
+    c.line(cx + total / 2 + trait_gap, y_surtitre + 2,
+           cx + total / 2 + trait_gap + trait_len, y_surtitre + 2)
+    # Texte du surtitre
+    c.setFillColor(HexColor(C_SURTITRE))
+    x = cx - total / 2
+    for ch, w in zip(surtitre, widths):
+        c.drawString(x, y_surtitre, ch)
+        x += w + tracking
+
+    # Titre
+    max_w = PAGE - 2 * (SAFE + 8*mm)
+    t_lines = wrap_text(c, titre, F_TITLE, titre_size, max_w)
+    while len(t_lines) > 2 and titre_size > 16:
+        titre_size -= 2
+        t_lines = wrap_text(c, titre, F_TITLE, titre_size, max_w)
+    c.setFillColor(HexColor(titre_color))
+    c.setFont(F_TITLE, titre_size)
+    ty = y_surtitre - 12*mm
+    for line in t_lines:
+        lw = c.stringWidth(line, F_TITLE, titre_size)
+        c.drawString(cx - lw / 2, ty, line)
+        ty -= titre_size * 1.2
+
+    # Trait orange court
+    bar_w = 12 * mm
+    c.setFillColor(HexColor(C_ORANGE))
+    c.roundRect(cx - bar_w / 2, ty - 1*mm, bar_w, 1.2*mm, 0.6*mm, fill=1, stroke=0)
+
+    return ty - 6*mm
+
 # ── Pages interieures ─────────────────────────────────────────────────────────
 
 def draw_endpaper(c):
@@ -438,30 +488,11 @@ def draw_pourquoi_sur_mesure(c, reassurance, prenom):
     cx = PAGE / 2
     _bg(c, C_CREME)
 
-    # Surtitre
-    draw_tracked(c, "SUR MESURE", F_BODY_B, 9, C_SURTITRE, cx, PAGE - 32*mm, 3.0)
-
-    # Titre
+    # En-tete commun
     prenom_txt = prenom or "votre enfant"
     titre_q = f"Pourquoi c'est parfait pour {prenom_txt} ?"
-    t_size = 22
-    max_w = PAGE - 2 * (SAFE + 8*mm)
-    t_lines = wrap_text(c, titre_q, F_TITLE, t_size, max_w)
-    while len(t_lines) > 2 and t_size > 16:
-        t_size -= 2
-        t_lines = wrap_text(c, titre_q, F_TITLE, t_size, max_w)
-    c.setFillColor(HexColor(C_BRUN))
-    c.setFont(F_TITLE, t_size)
-    ty = PAGE - 46*mm
-    for line in t_lines:
-        lw = c.stringWidth(line, F_TITLE, t_size)
-        c.drawString(cx - lw / 2, ty, line)
-        ty -= t_size * 1.2
-
-    # Trait orange
-    bar_w = 12 * mm
-    c.setFillColor(HexColor(C_ORANGE))
-    c.roundRect(cx - bar_w / 2, ty - 2*mm, bar_w, 1.2*mm, 0.6*mm, fill=1, stroke=0)
+    ty = draw_titre_editorial(c, "SUR MESURE", titre_q, PAGE - 32*mm,
+                              titre_size=22)
 
     # Liste des raisons
     raisons = (reassurance or {}).get("pourquoi") or []
@@ -489,7 +520,7 @@ def draw_pourquoi_sur_mesure(c, reassurance, prenom):
             total_h += len(wl) * line_h + item_gap
         total_h -= item_gap
 
-        zone_top = ty - 14*mm
+        zone_top = ty - 8*mm
         zone_bot = SAFE + 18*mm
         zone_h = zone_top - zone_bot
         y = zone_top - max(0, (zone_h - total_h) / 2)
@@ -717,30 +748,10 @@ def draw_benefices(c, reassurance, prenom):
     cx = PAGE / 2
     _bg(c, C_CREME)
 
-    # Surtitre
-    draw_tracked(c, "LES BIENFAITS DE CETTE HISTOIRE", F_BODY_B, 8, C_SURTITRE,
-                 cx, PAGE - 30*mm, 2.2)
-
-    # Titre
-    titre_b = "Ce que cette histoire apporte"
-    t_size = 22
-    max_w = PAGE - 2 * (SAFE + 8*mm)
-    t_lines = wrap_text(c, titre_b, F_TITLE, t_size, max_w)
-    while len(t_lines) > 2 and t_size > 16:
-        t_size -= 2
-        t_lines = wrap_text(c, titre_b, F_TITLE, t_size, max_w)
-    c.setFillColor(HexColor(C_BRUN))
-    c.setFont(F_TITLE, t_size)
-    ty = PAGE - 44*mm
-    for line in t_lines:
-        lw = c.stringWidth(line, F_TITLE, t_size)
-        c.drawString(cx - lw / 2, ty, line)
-        ty -= t_size * 1.2
-
-    # Trait orange
-    bar_w = 12 * mm
-    c.setFillColor(HexColor(C_ORANGE))
-    c.roundRect(cx - bar_w / 2, ty - 2*mm, bar_w, 1.2*mm, 0.6*mm, fill=1, stroke=0)
+    # En-tete commun
+    ty = draw_titre_editorial(c, "LES BIENFAITS DE CETTE HISTOIRE",
+                              "Ce que cette histoire apporte", PAGE - 32*mm,
+                              titre_size=22)
 
     # Liste des benefices
     benefices = (reassurance or {}).get("benefices") or []
@@ -801,6 +812,208 @@ def draw_benefices(c, reassurance, prenom):
     c.drawString(foot_x, foot_top - 19*mm,
                  "Histoire et illustrations g\u00e9n\u00e9r\u00e9es par intelligence artificielle.")
     c.showPage()
+
+
+def draw_a_propos(c):
+    """Page debut : l'histoire de Piklo (mot du fondateur)."""
+    _start_interior(c)
+    cx = PAGE / 2
+    _bg(c, C_CREME)
+
+    # En-tete commun
+    ty = draw_titre_editorial(c, "L'HISTOIRE DE PIKLO",
+                              "Tout a commenc\u00e9 avec Nael.", PAGE - 30*mm,
+                              titre_size=26)
+
+    body_x = SAFE + 12*mm
+    body_w = PAGE - 2 * (SAFE + 12*mm)
+    body_size = 13
+    body_lh = body_size * 1.55
+    y = ty - 14*mm
+
+    def _para(segments, size, lh, italic=False, color_all=None,
+              x_start=None, w_max=None):
+        nonlocal y
+        font_reg = F_ITALIC if italic else F_BODY
+        font_bold = F_BODY_B
+        bx = x_start if x_start is not None else body_x
+        bw = w_max if w_max is not None else body_w
+        words = []
+        for txt, bold in segments:
+            for w in txt.split(" "):
+                if w:
+                    words.append((w, bold))
+        space_w = c.stringWidth(" ", font_reg, size)
+        lines_acc, cur, cur_w = [], [], 0
+        for w, bold in words:
+            f = font_bold if bold else font_reg
+            ww = c.stringWidth(w, f, size)
+            add = ww + (space_w if cur else 0)
+            if cur_w + add <= bw:
+                cur.append((w, bold)); cur_w += add
+            else:
+                lines_acc.append(cur); cur = [(w, bold)]; cur_w = ww
+        if cur:
+            lines_acc.append(cur)
+        for ln in lines_acc:
+            x = bx
+            for w, b in ln:
+                f = font_bold if b else font_reg
+                col = color_all if color_all else ("#38302A" if b else "#5A5048")
+                c.setFillColor(HexColor(col))
+                c.setFont(f, size)
+                c.drawString(x, y, w)
+                x += c.stringWidth(w, f, size) + space_w
+            y -= lh
+
+    # Paragraphe 1
+    _para([("\u00c0 deux ans, mon fils avait peur du loup le soir. Pour le rassurer, on lui r\u00e9p\u00e9tait que nos deux chats, ", False),
+           ("Moon", True), (" et ", False), ("Naya", True),
+           (", veillaient sur lui.", False)], body_size, body_lh)
+
+    # Citation : bloc avec barre verticale orange a gauche
+    y -= 7*mm
+    quote = ("Une nuit, je me suis dit : et si je lui offrais une histoire o\u00f9 "
+             "ce sont vraiment eux, ses gardiens \u00e0 lui, qui le prot\u00e8gent ?")
+    quote_x = body_x + 6*mm
+    quote_w = body_w - 6*mm
+    q_size = 14
+    q_lines = wrap_text(c, quote, F_ITALIC, q_size, quote_w)
+    q_top = y + q_size * 0.5
+    q_h = len(q_lines) * q_size * 1.5
+    # Barre verticale
+    c.setFillColor(HexColor(C_ORANGE))
+    c.rect(body_x, y - q_h + q_size * 1.5 - 2*mm, 1.4, q_h, fill=1, stroke=0)
+    c.setFillColor(HexColor(C_ORANGE))
+    c.setFont(F_ITALIC, q_size)
+    for line in q_lines:
+        c.drawString(quote_x, y, line)
+        y -= q_size * 1.5
+
+    # Paragraphe 2
+    y -= 4*mm
+    _para([("Cr\u00e9atif passionn\u00e9 de nouvelles technologies, j'ai voulu donner \u00e0 chaque enfant ce que je cherchais pour le mien : un livre o\u00f9 il est le h\u00e9ros, entour\u00e9 de ce qui le rassure, dans une histoire qui lui ressemble vraiment.", False)],
+          body_size, body_lh)
+
+    # Paragraphe 3
+    y -= 4*mm
+    _para([("Piklo", True),
+           (" est n\u00e9 de cette id\u00e9e simple. Que chaque enfant puisse se reconna\u00eetre, page apr\u00e8s page, et grandir un peu plus \u00e0 chaque lecture.", False)],
+          body_size, body_lh)
+
+    # Signature : filet + medaillon Piklo + nom, place sous le dernier paragraphe
+    y -= 10*mm
+    c.setStrokeColor(HexColor("#EADFD0"))
+    c.setLineWidth(0.7)
+    c.line(SAFE + 30*mm, y, PAGE - SAFE - 30*mm, y)
+    y -= 9*mm
+    # Medaillon Piklo centre
+    box = 11*mm
+    draw_piklo_mark(c, cx - box/2, y - box, box=box, with_label=False)
+    y -= box + 4*mm
+    # Nom
+    c.setFillColor(HexColor(C_BRUN))
+    c.setFont(F_TITLE, 15)
+    nom = "Marouan"
+    c.drawString(cx - c.stringWidth(nom, F_TITLE, 15)/2, y, nom)
+    y -= 6*mm
+    c.setFillColor(HexColor(C_GRIS))
+    c.setFont(F_BODY, 10)
+    role = "Fondateur de Piklo"
+    c.drawString(cx - c.stringWidth(role, F_BODY, 10)/2, y, role)
+
+    c.showPage()
+
+
+def draw_souvenir(c, prenom=None):
+    """Page fin : 'Le souvenir de cette lecture' a completer a la main."""
+    _start_interior(c)
+    cx = PAGE / 2
+    _bg(c, C_CREME)
+    prenom_txt = prenom or "ton enfant"
+
+    # En-tete commun
+    ty = draw_titre_editorial(c, "RIEN QU'\u00c0 NOUS",
+                              "Le souvenir de cette lecture", PAGE - 30*mm,
+                              titre_size=24)
+
+    fx = SAFE + 12*mm
+    fw = PAGE - 2 * (SAFE + 12*mm)
+    label_size = 11
+    line_color = "#D8C9B6"
+    y = ty - 12*mm
+
+    def _ligne(x, y_base, w):
+        c.setStrokeColor(HexColor(line_color))
+        c.setLineWidth(0.6)
+        c.setDash(1, 2)
+        c.line(x, y_base, x + w, y_base)
+        c.setDash()
+
+    def _label(txt, x, y_base):
+        c.setFillColor(HexColor("#8A7E70"))
+        c.setFont(F_BODY_B, label_size)
+        c.drawString(x, y_base, txt)
+        return c.stringWidth(txt, F_BODY_B, label_size)
+
+    # Ligne 1 : date (gauche) + age (droite)
+    half = (fw - 8*mm) / 2
+    _label("Premi\u00e8re lecture le", fx, y)
+    _ligne(fx, y - 7*mm, half)
+    age_x = fx + half + 8*mm
+    lab_age = _label(f"{prenom_txt} avait", age_x, y)
+    _ligne(age_x, y - 7*mm, half - 12*mm)
+    c.setFillColor(HexColor("#8A7E70"))
+    c.setFont(F_BODY_B, label_size)
+    c.drawString(age_x + half - 10*mm, y - 7*mm, "ans")
+
+    # Ligne 2 : lu par
+    y -= 22*mm
+    _label("Lu par", fx, y)
+    _ligne(fx, y - 7*mm, fw)
+
+    # Bloc passage prefere (2 lignes)
+    y -= 22*mm
+    _label("Son passage pr\u00e9f\u00e9r\u00e9", fx, y)
+    y -= 11*mm
+    _ligne(fx, y, fw)
+    y -= 10*mm
+    _ligne(fx, y, fw)
+
+    # Bloc petit mot : encadre creme arrondi
+    y -= 12*mm
+    box_h = 34*mm
+    box_top = y
+    box_bot = y - box_h
+    c.setFillColor(HexColor("#F6ECDD"))
+    c.roundRect(fx, box_bot, fw, box_h, 4*mm, fill=1, stroke=0)
+    c.setFillColor(HexColor(C_ORANGE))
+    c.setFont(F_BODY_B, label_size)
+    c.drawString(fx + 6*mm, box_top - 9*mm, "Un petit mot \u00e0 garder toute la vie")
+    ly = box_top - 18*mm
+    for _ in range(2):
+        _ligne(fx + 6*mm, ly, fw - 12*mm)
+        ly -= 9*mm
+
+    # Encadre dessin
+    y = box_bot - 8*mm
+    draw_box_bot = SAFE + 12*mm
+    draw_h = y - draw_box_bot
+    if draw_h < 28*mm:
+        draw_box_bot = y - 30*mm
+        draw_h = 30*mm
+    c.setStrokeColor(HexColor("#E0D2C0"))
+    c.setLineWidth(0.8)
+    c.setDash(2, 3)
+    c.roundRect(fx, draw_box_bot, fw, draw_h, 3*mm, fill=0, stroke=1)
+    c.setDash()
+    c.setFillColor(HexColor("#B8A894"))
+    c.setFont(F_ITALIC, 11)
+    c.drawString(fx + 5*mm, y - 7*mm, f"Le dessin de {prenom_txt}")
+
+    c.showPage()
+
+
 
 
 # ── Wraparound couverture ─────────────────────────────────────────────────────
@@ -1011,8 +1224,8 @@ def assembler_pdf_gelato(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
         c = canvas.Canvas(interior_path, pagesize=(PAGE_FULL, PAGE_FULL))
 
         draw_endpaper(c)                                         # p.1
-        draw_endpaper(c)                                         # p.2
-        draw_faux_titre(c, titre)                                # p.3
+        draw_faux_titre(c, titre)                                # p.2
+        draw_a_propos(c)                                         # p.3 (histoire de Piklo)
         draw_dedicace(c, dedicace, prenom)                       # p.4
         for page in pages_ok:                                    # p.5-28
             draw_text_page(c, page.get("legende", ""), bg_hex, fg_hex)
@@ -1020,7 +1233,7 @@ def assembler_pdf_gelato(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
         draw_pourquoi_sur_mesure(c, reassurance, prenom)         # p.29
         draw_marketing(c, tmp)                                   # p.30
         draw_benefices(c, reassurance, prenom)                   # p.31
-        draw_endpaper(c)                                         # p.32
+        draw_souvenir(c, prenom)                                 # p.32 (rien qu'a nous)
         draw_endpaper(c)                                         # p.33
         draw_endpaper(c)                                         # p.34 (total = 34 reelles, Gelato voit 35)
 
