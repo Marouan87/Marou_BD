@@ -992,16 +992,18 @@ def assembler_pdf_gelato(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
         c = canvas.Canvas(interior_path, pagesize=(PAGE, PAGE))
 
         draw_endpaper(c)                                         # p.1
-        draw_faux_titre(c, titre)                                # p.2
-        draw_dedicace(c, dedicace, prenom)                       # p.3
-        for page in pages_ok:                                    # p.4-27
+        draw_endpaper(c)                                         # p.2
+        draw_faux_titre(c, titre)                                # p.3
+        draw_dedicace(c, dedicace, prenom)                       # p.4
+        for page in pages_ok:                                    # p.5-28
             draw_text_page(c, page.get("legende", ""), bg_hex, fg_hex)
             draw_image_page(c, img_paths[page["id"]])
-        draw_pourquoi_sur_mesure(c, reassurance, prenom)         # p.28
-        draw_marketing(c, tmp)                                   # p.29
-        draw_benefices(c, reassurance, prenom)                   # p.30
-        draw_endpaper(c)                                         # p.31
-        draw_endpaper(c)                                         # p.32 (total = 32, valeur Gelato valide)
+        draw_pourquoi_sur_mesure(c, reassurance, prenom)         # p.29
+        draw_marketing(c, tmp)                                   # p.30
+        draw_benefices(c, reassurance, prenom)                   # p.31
+        draw_endpaper(c)                                         # p.32
+        draw_endpaper(c)                                         # p.33
+        draw_endpaper(c)                                         # p.34 (total = 34 reelles, Gelato voit 35)
 
         c.save()
 
