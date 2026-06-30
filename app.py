@@ -1001,6 +1001,7 @@ def assembler_pdf_gelato(histoire_id, palette_id=PALETTE_DEFAUT, histoire=None):
         draw_marketing(c, tmp)                                   # p.29
         draw_benefices(c, reassurance, prenom)                   # p.30
         draw_endpaper(c)                                         # p.31
+        draw_endpaper(c)                                         # p.32 (total = 32, valeur Gelato valide)
 
         c.save()
 
