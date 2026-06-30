@@ -179,11 +179,14 @@ def fetch_pages(histoire_id):
 
 
 def upload_pdf(pdf_bytes, filename):
+    print(f"Uploading PDF: {filename} ({len(pdf_bytes)} bytes)", flush=True)
     r = requests.post(
         f"{SUPABASE_URL}/storage/v1/object/pdfs/{filename}",
         headers={**HEADERS, "Content-Type": "application/pdf", "x-upsert": "true"},
         data=pdf_bytes,
     )
+    if not r.ok:
+        print(f"Upload failed {r.status_code}: {r.text}", flush=True)
     r.raise_for_status()
     return f"{SUPABASE_URL}/storage/v1/object/public/pdfs/{filename}"
 
