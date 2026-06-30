@@ -910,7 +910,7 @@ def draw_a_propos(c):
     # Medaillon Piklo centre
     box = 11*mm
     draw_piklo_mark(c, cx - box/2, y - box, box=box, with_label=False)
-    y -= box + 4*mm
+    y -= box + 9*mm
     # Nom
     c.setFillColor(HexColor(C_BRUN))
     c.setFont(F_TITLE, 15)
@@ -932,16 +932,16 @@ def draw_souvenir(c, prenom=None):
     _bg(c, C_CREME)
     prenom_txt = prenom or "ton enfant"
 
-    # En-tete commun
+    # En-tete commun (remonte pour liberer de la place en bas)
     ty = draw_titre_editorial(c, "RIEN QU'\u00c0 NOUS",
-                              "Le souvenir de cette lecture", PAGE - 30*mm,
+                              "Le souvenir de cette lecture", PAGE - 22*mm,
                               titre_size=24)
 
     fx = SAFE + 12*mm
     fw = PAGE - 2 * (SAFE + 12*mm)
     label_size = 11
     line_color = "#D8C9B6"
-    y = ty - 12*mm
+    y = ty - 10*mm
 
     def _ligne(x, y_base, w):
         c.setStrokeColor(HexColor(line_color))
@@ -968,21 +968,21 @@ def draw_souvenir(c, prenom=None):
     c.drawString(age_x + half - 10*mm, y - 7*mm, "ans")
 
     # Ligne 2 : lu par
-    y -= 22*mm
+    y -= 18*mm
     _label("Lu par", fx, y)
     _ligne(fx, y - 7*mm, fw)
 
     # Bloc passage prefere (2 lignes)
-    y -= 22*mm
+    y -= 18*mm
     _label("Son passage pr\u00e9f\u00e9r\u00e9", fx, y)
-    y -= 11*mm
-    _ligne(fx, y, fw)
     y -= 10*mm
+    _ligne(fx, y, fw)
+    y -= 9*mm
     _ligne(fx, y, fw)
 
     # Bloc petit mot : encadre creme arrondi
-    y -= 12*mm
-    box_h = 34*mm
+    y -= 11*mm
+    box_h = 30*mm
     box_top = y
     box_bot = y - box_h
     c.setFillColor(HexColor("#F6ECDD"))
@@ -990,18 +990,15 @@ def draw_souvenir(c, prenom=None):
     c.setFillColor(HexColor(C_ORANGE))
     c.setFont(F_BODY_B, label_size)
     c.drawString(fx + 6*mm, box_top - 9*mm, "Un petit mot \u00e0 garder toute la vie")
-    ly = box_top - 18*mm
+    ly = box_top - 17*mm
     for _ in range(2):
         _ligne(fx + 6*mm, ly, fw - 12*mm)
-        ly -= 9*mm
+        ly -= 8*mm
 
-    # Encadre dessin
-    y = box_bot - 8*mm
-    draw_box_bot = SAFE + 12*mm
-    draw_h = y - draw_box_bot
-    if draw_h < 28*mm:
-        draw_box_bot = y - 30*mm
-        draw_h = 30*mm
+    # Encadre dessin : occupe l'espace restant jusqu'a la marge basse
+    draw_top = box_bot - 8*mm
+    draw_box_bot = SAFE + 10*mm
+    draw_h = draw_top - draw_box_bot
     c.setStrokeColor(HexColor("#E0D2C0"))
     c.setLineWidth(0.8)
     c.setDash(2, 3)
@@ -1009,7 +1006,7 @@ def draw_souvenir(c, prenom=None):
     c.setDash()
     c.setFillColor(HexColor("#B8A894"))
     c.setFont(F_ITALIC, 11)
-    c.drawString(fx + 5*mm, y - 7*mm, f"Le dessin de {prenom_txt}")
+    c.drawString(fx + 5*mm, draw_top - 7*mm, f"Le dessin de {prenom_txt}")
 
     c.showPage()
 
