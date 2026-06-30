@@ -536,23 +536,65 @@ def _make_book_cover(img_content, out_w=300, out_h=380):
     return canvas_img
 
 
+def _vignette_arrondie(img_content, target_px=600, radius_ratio=0.07,
+                       shadow_blur=18, shadow_alpha=90, shadow_offset=10):
+    """Prend une couverture finie et renvoie une image RGBA avec coins
+    arrondis et ombre portee douce, prete a etre posee sur le fond brun."""
+    src = PILImage.open(io.BytesIO(img_content)).convert("RGB")
+    w, h = src.size
+    # Normaliser la largeur a target_px en gardant le ratio
+    new_w = target_px
+    new_h = int(round(h * (target_px / w)))
+    src = src.resize((new_w, new_h), PILImage.LANCZOS).convert("RGBA")
+
+    radius = int(min(new_w, new_h) * radius_ratio)
+
+    # Masque arrondi
+    mask = PILImage.new("L", (new_w, new_h), 0)
+    mdraw = PILDraw.Draw(mask)
+    mdraw.rounded_rectangle([0, 0, new_w - 1, new_h - 1], radius=radius, fill=255)
+    src.putalpha(mask)
+
+    # Canvas avec marge pour l'ombre
+    pad = shadow_blur * 2 + shadow_offset
+    canvas_img = PILImage.new("RGBA", (new_w + pad * 2, new_h + pad * 2), (0, 0, 0, 0))
+
+    # Ombre : silhouette arrondie floutee
+    shadow = PILImage.new("RGBA", canvas_img.size, (0, 0, 0, 0))
+    sdraw = PILDraw.Draw(shadow)
+    sx0 = pad + shadow_offset // 2
+    sy0 = pad + shadow_offset
+    sdraw.rounded_rectangle(
+        [sx0, sy0, sx0 + new_w, sy0 + new_h],
+        radius=radius, fill=(20, 12, 6, shadow_alpha)
+    )
+    shadow = shadow.filter(PILFilter.GaussianBlur(shadow_blur))
+    canvas_img = PILImage.alpha_composite(canvas_img, shadow)
+
+    # Image par-dessus
+    canvas_img.alpha_composite(src, (pad, pad))
+    return canvas_img, pad, new_w, new_h
+
+
 def draw_marketing(c, tmp_dir):
     cx = PAGE / 2
     c.setFillColor(HexColor(C_BRUN))
     c.rect(0, 0, PAGE, PAGE, fill=1, stroke=0)
 
+    # ── En-tete ────────────────────────────────────────────────────────────
     draw_tracked(c, "DECOUVREZ NOS HISTOIRES", F_BODY_B, 8, C_SURTITRE,
                  cx, PAGE - 28*mm, 2.5)
     c.setFillColor(HexColor(C_CREME))
-    c.setFont(F_TITLE, 20)
-    titre_w = c.stringWidth("Encore plus d'aventures !", F_TITLE, 20)
-    c.drawString(cx - titre_w / 2, PAGE - 40*mm, "Encore plus d'aventures !")
+    c.setFont(F_TITLE, 22)
+    titre_w = c.stringWidth("Encore plus d'aventures !", F_TITLE, 22)
+    c.drawString(cx - titre_w / 2, PAGE - 42*mm, "Encore plus d'aventures !")
 
-    vignette_w = 48 * mm
-    gap = 6 * mm
+    # ── Trois vignettes arrondies avec ombre ──────────────────────────────────
+    vignette_w = 52 * mm
+    gap = 5 * mm
     total_w = 3 * vignette_w + 2 * gap
     start_x = cx - total_w / 2
-    y_top = PAGE - 50*mm
+    y_top = PAGE - 58*mm   # haut des vignettes
 
     for i, univers in enumerate(UNIVERS_MARKETING):
         x = start_x + i * (vignette_w + gap)
@@ -560,54 +602,93 @@ def draw_marketing(c, tmp_dir):
             try:
                 r = requests.get(univers["url"], timeout=20)
                 r.raise_for_status()
-                # Les assets sont deja des couvertures finies (tranche, logo,
-                # titre). On les affiche telles quelles, au ratio natif, sans
-                # aucune transformation qui les deformerait.
-                src = PILImage.open(io.BytesIO(r.content)).convert("RGB")
-                img_w_px, img_h_px = src.size
-                book_path = os.path.join(tmp_dir, f"mktg_{i}.jpg")
-                src.save(book_path, format="JPEG", quality=92)
-                draw_w = vignette_w
-                draw_h = draw_w * (img_h_px / img_w_px)
-                y_img = y_top - draw_h
-                c.drawImage(book_path,
-                            x + (vignette_w - draw_w) / 2,
-                            y_img,
-                            width=draw_w,
-                            height=draw_h,
-                            preserveAspectRatio=False)
+                vig, pad, vw_px, vh_px = _vignette_arrondie(r.content)
+                book_path = os.path.join(tmp_dir, f"mktg_{i}.png")
+                vig.save(book_path, format="PNG")
+                # Echelle : la largeur visible de l'image = vignette_w
+                scale = vignette_w / vw_px
+                full_w = vig.size[0] * scale
+                full_h = vig.size[1] * scale
+                pad_pt = pad * scale
+                # On positionne pour que le coin haut-gauche de l'IMAGE
+                # (hors padding ombre) tombe a (x, y_top - hauteur image)
+                draw_h_img = vh_px * scale
+                img_x = x - pad_pt
+                img_y = (y_top - draw_h_img) - pad_pt
+                c.drawImage(book_path, img_x, img_y,
+                            width=full_w, height=full_h,
+                            preserveAspectRatio=False, mask='auto')
             except Exception:
                 draw_h = vignette_w
-                y_img = y_top - draw_h
-                _draw_placeholder(c, x, y_img, vignette_w, draw_h)
+                _draw_placeholder(c, x, y_top - draw_h, vignette_w, draw_h)
         else:
             draw_h = vignette_w
-            y_img = y_top - draw_h
-            _draw_placeholder(c, x, y_img, vignette_w, draw_h)
+            _draw_placeholder(c, x, y_top - draw_h, vignette_w, draw_h)
 
-        c.setFillColor(HexColor(C_CREME))
-        if univers["titre"]:
-            tit = univers["titre"]
-            font_size = 8
-            c.setFont(F_BODY, font_size)
-            tw = c.stringWidth(tit, F_BODY, font_size)
-            if tw > vignette_w:
-                font_size = 7
-                c.setFont(F_BODY, font_size)
-                tw = c.stringWidth(tit, F_BODY, font_size)
-            c.drawString(x + vignette_w / 2 - tw / 2, y_img - 5*mm, tit)
+    # ── Encart CTA en bas ─────────────────────────────────────────────────────
+    card_x = SAFE + 2*mm
+    card_w = PAGE - 2 * (SAFE + 2*mm)
+    card_h = 56*mm
+    card_y = SAFE + 8*mm
+    card_r = 6*mm
 
+    c.setFillColor(HexColor(C_CREME))
+    c.roundRect(card_x, card_y, card_w, card_h, card_r, fill=1, stroke=0)
+
+    # QR a droite, dans un petit cadre
     qr = qrcode.make(f"https://{BRAND_SITE}")
     qr_path = os.path.join(tmp_dir, "qr.png")
     qr.save(qr_path)
-    qr_size = 22 * mm
-    qr_x = cx - qr_size / 2
-    qr_y = SAFE + 18*mm
-    c.drawImage(qr_path, qr_x, qr_y, width=qr_size, height=qr_size)
-    c.setFillColor(HexColor(C_CREME))
-    c.setFont(F_BODY_B, 9)
-    site_w = c.stringWidth(BRAND_SITE, F_BODY_B, 9)
-    c.drawString(cx - site_w / 2, qr_y - 5*mm, BRAND_SITE)
+    qr_size = 30*mm
+    qr_pad = 4*mm
+    qr_box = qr_size + 2 * qr_pad
+    qr_box_x = card_x + card_w - qr_box - 10*mm
+    qr_box_y = card_y + (card_h - qr_box) / 2
+    c.setFillColor(HexColor("#FFFFFF"))
+    c.setStrokeColor(HexColor("#E7D9C6"))
+    c.setLineWidth(0.8)
+    c.roundRect(qr_box_x, qr_box_y, qr_box, qr_box, 3*mm, fill=1, stroke=1)
+    c.drawImage(qr_path, qr_box_x + qr_pad, qr_box_y + qr_pad,
+                width=qr_size, height=qr_size)
+
+    # Texte a gauche
+    txt_x = card_x + 12*mm
+    # Surtitre aligne a gauche (tracking manuel depuis txt_x)
+    c.setFillColor(HexColor(C_ORANGE))
+    c.setFont(F_BODY_B, 8)
+    _sx = txt_x
+    for ch in "OFFRIR UNE HISTOIRE":
+        c.drawString(_sx, card_y + card_h - 16*mm, ch)
+        _sx += c.stringWidth(ch, F_BODY_B, 8) + 1.6
+
+    c.setFillColor(HexColor(C_BRUN))
+    titre_cta = "Et si la prochaine aventure etait la sienne ?"
+    cta_size = 16
+    max_cta_w = (qr_box_x - 6*mm) - txt_x
+    cta_lines = wrap_text(c, titre_cta, F_TITLE, cta_size, max_cta_w)
+    while len(cta_lines) > 2 and cta_size > 12:
+        cta_size -= 1
+        cta_lines = wrap_text(c, titre_cta, F_TITLE, cta_size, max_cta_w)
+    c.setFont(F_TITLE, cta_size)
+    cy = card_y + card_h - 24*mm
+    for line in cta_lines:
+        c.drawString(txt_x, cy, line)
+        cy -= cta_size * 1.2
+
+    c.setFillColor(HexColor("#7C7064"))
+    c.setFont(F_BODY, 10)
+    sub = "Scannez le code pour creer un livre ou votre enfant devient le heros."
+    sub_lines = wrap_text(c, sub, F_BODY, 10, max_cta_w)
+    cy -= 2*mm
+    for line in sub_lines:
+        c.drawString(txt_x, cy, line)
+        cy -= 10 * 1.4
+
+    c.setFillColor(HexColor(C_ORANGE))
+    c.setFont(F_BODY_B, 10)
+    c.drawString(qr_box_x + (qr_box - c.stringWidth(BRAND_SITE, F_BODY_B, 10)) / 2,
+                 qr_box_y - 6*mm, BRAND_SITE)
+
     c.showPage()
 
 
